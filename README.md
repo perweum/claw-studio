@@ -159,6 +159,42 @@ nanoclaw's own `.env` (for `ANTHROPIC_API_KEY` and channel tokens) is read from 
 
 ---
 
+## Security Model
+
+The Blueprint chat assistant can run shell commands on your machine to help with setup and installation. This is a deliberate design decision — it removes the need to switch to a terminal for things like installing channels or configuring tokens. These guardrails are built in from the start:
+
+### Always blocked
+These patterns are rejected regardless of what you ask:
+
+| Pattern | Reason |
+|---------|--------|
+| `sudo` | No privilege escalation |
+| `curl ... \| bash` | No piped script execution |
+| `dd if=` | No disk write operations |
+| `mkfs` | No filesystem formatting |
+| Redirects to system paths (`> /etc/...`) | No writes outside user directories |
+
+### Requires your approval
+These commands are shown in the chat with **Approve / Cancel** buttons before anything runs:
+
+- `rm` / `rmdir` — file and directory deletion
+- `git reset --hard` / `git clean -f` — destructive git operations
+- `launchctl kickstart` / `systemctl restart` — service restarts (which briefly disconnect Blueprint itself)
+
+### Secret protection
+When reading `.env` files to check configuration, all values containing `_TOKEN`, `_SECRET`, `_PASSWORD`, `API_KEY`, or `OAUTH` are replaced with `[hidden]` before being sent to Claude. Your API keys and channel tokens are never included in the AI context.
+
+### Sandbox
+All commands run with the nanoclaw directory as the working directory. `read_file` rejects any path that resolves outside the nanoclaw directory (preventing path traversal).
+
+### Network exposure
+The dev server binds to `localhost` only (Vite's default). Blueprint UI is not accessible from other machines on your network unless you explicitly change `vite.config.ts`.
+
+### Prompt injection
+File contents (CLAUDE.md, logs, etc.) read by the assistant are passed as tool results, not injected into the system prompt, reducing the risk of malicious content in files redirecting the assistant.
+
+---
+
 ## Contributing
 
 Contributions are welcome! A few things to know:

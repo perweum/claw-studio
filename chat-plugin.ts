@@ -542,6 +542,37 @@ async function handleGroups(req: IncomingMessage, res: ServerResponse): Promise<
     return;
   }
 
+  // ── POST /api/groups — create a new group folder ───────────────────────────
+  if (req.method === 'POST' && parts.length === 0) {
+    try {
+      const body = JSON.parse(await readBody(req)) as { name: string };
+      const folder = (body.name ?? '')
+        .trim().toLowerCase()
+        .replace(/\s+/g, '_')
+        .replace(/[^a-z0-9_-]/g, '')
+        .replace(/_{2,}/g, '_')
+        .slice(0, 50);
+      if (!folder || !isValidFolder(folder)) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ error: 'Invalid bot name' }));
+        return;
+      }
+      const groupDir = path.join(GROUPS_DIR, folder);
+      if (fs.existsSync(groupDir)) {
+        res.writeHead(409);
+        res.end(JSON.stringify({ error: `A bot named "${folder}" already exists` }));
+        return;
+      }
+      fs.mkdirSync(groupDir, { recursive: true });
+      res.writeHead(200);
+      res.end(JSON.stringify({ ok: true, folder }));
+    } catch (err) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: String(err) }));
+    }
+    return;
+  }
+
   const folder = parts[0];
   const resource = parts[1]; // 'blueprint' | 'claude-md'
 

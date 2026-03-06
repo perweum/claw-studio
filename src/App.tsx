@@ -63,6 +63,7 @@ function Canvas({ onContextMenu }: { onContextMenu: (ctx: CtxMenu) => void }) {
 export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
+  const [groupPickerMode, setGroupPickerMode] = useState<'list' | 'new'>('list');
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
   const [showWizard, setShowWizard] = useState(false);
 
@@ -97,7 +98,8 @@ export default function App() {
       <div className="app">
         <Toolbar
           onOpenPalette={() => setPaletteOpen(true)}
-          onOpenGroupPicker={() => setGroupPickerOpen(true)}
+          onOpenGroupPicker={() => { setGroupPickerMode('list'); setGroupPickerOpen(true); }}
+          onNewBot={() => { setGroupPickerMode('new'); setGroupPickerOpen(true); }}
         />
         <div className="app__body">
           <div className="app__main">
@@ -117,7 +119,7 @@ export default function App() {
 
       {showWizard && <SetupWizard onDone={() => setShowWizard(false)} />}
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
-      {groupPickerOpen && <GroupPicker onClose={() => setGroupPickerOpen(false)} />}
+      {groupPickerOpen && <GroupPicker onClose={() => setGroupPickerOpen(false)} initialMode={groupPickerMode} />}
       {ctxMenu && (
         <ContextMenu
           x={ctxMenu.x}

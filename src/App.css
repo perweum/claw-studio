@@ -1176,6 +1176,124 @@ body {
 }
 .react-flow__handle:hover { border-color: var(--accent-agent) !important; }
 
+/* ── Bot picker (formerly group picker) ───────────────────── */
+.toolbar__group-btn--new {
+  background: transparent;
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.toolbar__group-btn--new:hover {
+  border-color: var(--accent-agent);
+  color: var(--accent-agent);
+  background: transparent;
+}
+.group-picker__header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.group-picker__tab {
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: -1px;
+}
+.group-picker__tab--active {
+  color: var(--text);
+  border-bottom-color: var(--accent-agent);
+}
+.group-picker__tab:hover:not(.group-picker__tab--active) { color: var(--text); }
+.group-picker__close-btn {
+  margin-left: auto;
+  padding: 4px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+.group-picker__close-btn:hover { color: var(--text); border-color: var(--text-muted); }
+.group-picker__item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+.group-picker__bot-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+.group-picker__item-meta {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.group-picker__channel-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+.group-picker__status-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.group-picker__status-badge--warn {
+  background: #f59e0b11;
+  color: #f59e0b;
+  border-color: #f59e0b33;
+}
+.group-picker__current-badge {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: var(--accent-agent);
+  color: #fff;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.group-picker__new-form {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.group-picker__new-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.group-picker__new-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.group-picker__new-hint code {
+  font-family: 'Menlo', 'Monaco', monospace;
+  color: var(--accent-agent);
+  font-size: 11px;
+}
+.group-picker__new-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
 /* ── Command log (terminal output in chat) ────────────────── */
 .chat-msg__cmd-log {
   display: flex;

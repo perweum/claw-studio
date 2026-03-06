@@ -17,12 +17,17 @@ const SAVE_STATUS_COLORS: Record<string, string> = {
 
 type DeployState = 'idle' | 'deploying' | 'done' | 'error';
 
+function formatBotName(folder: string): string {
+  return folder.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 interface ToolbarProps {
   onOpenPalette: () => void;
   onOpenGroupPicker: () => void;
+  onNewBot: () => void;
 }
 
-export function Toolbar({ onOpenPalette, onOpenGroupPicker }: ToolbarProps) {
+export function Toolbar({ onOpenPalette, onOpenGroupPicker, onNewBot }: ToolbarProps) {
   const { nodes, addNode, currentGroupFolder, saveStatus, saveCurrentGroup, exportProject, deployToGroup } = useStore();
   const [deployState, setDeployState] = useState<DeployState>('idle');
   const [deployPreview, setDeployPreview] = useState<string | null>(null);
@@ -67,13 +72,20 @@ export function Toolbar({ onOpenPalette, onOpenGroupPicker }: ToolbarProps) {
           <button
             className={`toolbar__group-btn ${currentGroupFolder ? 'toolbar__group-btn--active' : ''}`}
             onClick={onOpenGroupPicker}
-            title="Open a nanoclaw group"
+            title="Switch bot"
           >
             {currentGroupFolder ? (
-              <><span className="toolbar__group-dot" />{currentGroupFolder}</>
+              <><span className="toolbar__group-dot" />{formatBotName(currentGroupFolder)}</>
             ) : (
-              'Open group…'
+              'My bots'
             )}
+          </button>
+          <button
+            className="toolbar__group-btn toolbar__group-btn--new"
+            onClick={onNewBot}
+            title="Create a new bot"
+          >
+            + New bot
           </button>
           {saveStatus !== 'idle' && (
             <span className="toolbar__save-status" style={{ color: SAVE_STATUS_COLORS[saveStatus] }}>

@@ -95,6 +95,19 @@ export function GroupPicker({ onClose, initialMode = 'list', onNewChannel }: Gro
     }
   }
 
+  async function handleAddChannel(skillMsg: string) {
+    // Create the bot first if the user has typed a name
+    if (botName.trim()) {
+      try {
+        await createBot(botName.trim(), undefined);
+      } catch {
+        // Non-fatal — proceed to channel setup anyway
+      }
+    }
+    onClose();
+    onNewChannel?.(skillMsg);
+  }
+
   return (
     <div className="palette-backdrop" onClick={onClose}>
       <div className="palette group-picker" onClick={(e) => e.stopPropagation()}>
@@ -236,7 +249,7 @@ export function GroupPicker({ onClose, initialMode = 'list', onNewChannel }: Gro
                         key={platform}
                         className="group-picker__channel-add-btn"
                         style={{ borderColor: color + '66', color }}
-                        onClick={() => { onClose(); onNewChannel(skillMsg); }}
+                        onClick={() => handleAddChannel(skillMsg)}
                       >
                         + {label}
                       </button>

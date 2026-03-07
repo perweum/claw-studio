@@ -269,8 +269,17 @@ fi
 # ── Create macOS app (no quarantine — assembled locally from repo) ────────────
 step "Creating Claw Studio app"
 
-APP_DST="/Applications/Claw Studio.app"
 APP_TEMPLATE="$STUDIO_DIR/macos-app/Claw Studio.app"
+
+# Prefer ~/Applications (no sudo needed); fall back to /Applications if it
+# is writable (e.g. the user already owns it or runs as admin).
+if [[ -w "/Applications" ]]; then
+  APP_DST="/Applications/Claw Studio.app"
+else
+  mkdir -p "$HOME/Applications"
+  APP_DST="$HOME/Applications/Claw Studio.app"
+  warn "No write access to /Applications — installing to ~/Applications instead (still shows in Launchpad & Spotlight)"
+fi
 
 # Remove any existing copy
 rm -rf "$APP_DST"
@@ -315,7 +324,7 @@ LAUNCHEOF
 chmod +x "$APP_DST/Contents/MacOS/launch"
 
 ok "App installed: $APP_DST"
-ok "Find it in Launchpad or Spotlight — search 'Claw Studio'"
+ok "Find it in Launchpad or Spotlight — search for 'Claw Studio'"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""

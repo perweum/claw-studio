@@ -58,19 +58,27 @@ function isNanoclawDir(dir: string): boolean {
     (fs.existsSync(path.join(dir, 'store')) || fs.existsSync(path.join(dir, 'src', 'index.ts')));
 }
 
+let _nanoclawPathCache: string | null | undefined = undefined;
+
 function detectNanoclawPath(): string | null {
-  if (process.env.NANOCLAW_PATH) return process.env.NANOCLAW_PATH;
+  if (_nanoclawPathCache !== undefined) return _nanoclawPathCache;
+  if (process.env.NANOCLAW_PATH) { _nanoclawPathCache = process.env.NANOCLAW_PATH; return _nanoclawPathCache; }
   const saved = readLocalEnvValue('NANOCLAW_PATH');
-  if (saved && fs.existsSync(saved) && isNanoclawDir(saved)) return saved;
-  // Walk up from CWD (handles the case where Blueprint UI is inside nanoclaw/Projects/)
+  if (saved && fs.existsSync(saved) && isNanoclawDir(saved)) { _nanoclawPathCache = saved; return _nanoclawPathCache; }
+  // Walk up from CWD (handles the case where Claw Studio is inside nanoclaw/Projects/)
   let dir = path.dirname(process.cwd());
   for (let i = 0; i < 5; i++) {
-    if (isNanoclawDir(dir)) return dir;
+    if (isNanoclawDir(dir)) { _nanoclawPathCache = dir; return _nanoclawPathCache; }
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
+  _nanoclawPathCache = null;
   return null;
+}
+
+function invalidateNanoclawPathCache(): void {
+  _nanoclawPathCache = undefined;
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -153,7 +161,8 @@ function executeCommand(cmd: string, nanoclawPath: string): { output: string; ok
 
 function readFileSecure(relativePath: string, nanoclawPath: string): string {
   const resolved = path.resolve(nanoclawPath, relativePath);
-  if (!resolved.startsWith(path.resolve(nanoclawPath))) {
+  const safeRoot = path.resolve(nanoclawPath) + path.sep;
+  if (resolved !== path.resolve(nanoclawPath) && !resolved.startsWith(safeRoot)) {
     return 'ERROR: Path outside nanoclaw directory is not allowed';
   }
   try {
@@ -167,7 +176,10 @@ function readFileSecure(relativePath: string, nanoclawPath: string): string {
         return line;
       }).join('\n');
     }
-    return content.slice(0, 8000);
+    if (content.length > 8000) {
+      return content.slice(0, 8000) + '\n\n[... file truncated at 8000 characters ...]';
+    }
+    return content;
   } catch (err) {
     return `ERROR: ${err instanceof Error ? err.message : String(err)}`;
   }
@@ -211,7 +223,7 @@ const SYSTEM = `You are an AI assistant embedded in Claw Studio — a visual nod
 - bash: a shell command the agent can run
 - search: web search capability (no config needed)
 - mcp: a plugin that connects to an external service (Gmail, Calendar, Weather, etc.)
-  - MCP config format: {"server": "server-name", "endpoint": "action.name"}
+  - MCP config format: {"server": "server-name", "action": "action.name"}
   - Common servers: gmail-mcp, google-calendar-mcp, openweathermap-mcp, newsapi-mcp
 
 **condition** — Branch based on a simple rule (no AI needed)
@@ -634,6 +646,8 @@ async function handleGroups(req: IncomingMessage, res: ServerResponse): Promise<
   // ── POST /api/groups/:folder/register — register an existing group ─────────
   if (req.method === 'POST' && parts.length === 2 && parts[1] === 'register') {
     try {
+      const folder = parts[0];
+      if (!folder || !isValidFolder(folder)) { res.writeHead(400); res.end(JSON.stringify({ error: 'Invalid folder name' })); return; }
       const body = JSON.parse(await readBody(req)) as { channelJid: string };
       if (!body.channelJid) { res.writeHead(400); res.end(JSON.stringify({ error: 'channelJid required' })); return; }
       const nanoclawPath = detectNanoclawPath();
@@ -748,6 +762,7 @@ async function handleGroups(req: IncomingMessage, res: ServerResponse): Promise<
       const agents   = nodes.filter(n => n.type === 'agent');
       const tools    = nodes.filter(n => n.type === 'tool');
       const triggers = nodes.filter(n => n.type === 'trigger');
+      const outputs  = nodes.filter(n => n.type === 'output');
 
       if (agents.length === 0) {
         res.writeHead(400);
@@ -763,6 +778,13 @@ async function handleGroups(req: IncomingMessage, res: ServerResponse): Promise<
       // ── Track what was done vs what needs manual steps ──
       const done: string[] = [`CLAUDE.md written to groups/${folder}/CLAUDE.md`];
       const manual: string[] = [];
+
+      if (triggers.length === 0) {
+        manual.push('No trigger node — add a Trigger node so the bot knows when to run');
+      }
+      if (outputs.length === 0) {
+        manual.push('No output node — add an Output node so the bot can send messages somewhere');
+      }
 
       // ── Register schedule tasks ──
       const scheduleTriggers = triggers.filter(n => n.data.triggerType === 'schedule');
@@ -921,6 +943,7 @@ async function handleConfig(req: IncomingMessage, res: ServerResponse): Promise<
 
       for (const [key, value] of Object.entries(body)) {
         if (typeof value !== 'string') continue;
+        if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) continue;
         const escaped = value.replace(/\n/g, '\\n');
         const lineRegex = new RegExp(`^${key}=.*$`, 'm');
         if (lineRegex.test(envContent)) {
@@ -969,6 +992,7 @@ async function handleSetup(req: IncomingMessage, res: ServerResponse): Promise<v
       if (!fs.existsSync(p)) throw new Error(`Path not found: ${p}`);
       if (!isNanoclawDir(p)) throw new Error(`Not a nanoclaw installation: ${p}\n(Expected to find a groups/ folder and src/ or store/)`);
       writeLocalEnvValue('NANOCLAW_PATH', p);
+      invalidateNanoclawPathCache();
       res.writeHead(200);
       res.end(JSON.stringify({ ok: true, path: p }));
     } catch (err) {
@@ -1158,6 +1182,12 @@ async function handleBackup(_req: IncomingMessage, res: ServerResponse): Promise
     if (!res.headersSent) {
       res.writeHead(500);
       res.end('zip command failed');
+    }
+  });
+  zip.on('close', (code) => {
+    if (code !== 0) {
+      console.error(`[backup] zip exited with code ${code}`);
+      // Headers already sent — can't change status, but log it.
     }
   });
 }

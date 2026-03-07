@@ -17,6 +17,11 @@ function nextId() {
   return `node-${++nodeCounter}`;
 }
 
+let msgCounter = 0;
+function nextMsgId() {
+  return `msg-${++msgCounter}`;
+}
+
 function defaultData(kind: NodeKind): BlueprintNodeData {
   switch (kind) {
     case 'agent':
@@ -208,7 +213,7 @@ export const useStore = create<BlueprintStore>((set, get) => ({
   sendChatMessage: async (text: string) => {
     const { chatMessages, nodes, edges, applyOperations } = get();
 
-    const userMsg: ChatMessage = { id: `msg-${Date.now()}`, role: 'user', content: text };
+    const userMsg: ChatMessage = { id: nextMsgId(), role: 'user', content: text };
     set((s) => ({ chatMessages: [...s.chatMessages, userMsg], isChatLoading: true }));
 
     const graphState = buildGraphSummary(nodes, edges);
@@ -230,7 +235,7 @@ export const useStore = create<BlueprintStore>((set, get) => ({
       const opsApplied = data.operations?.length ? applyOperations(data.operations) : 0;
 
       const assistantMsg: ChatMessage = {
-        id: `msg-${Date.now()}`,
+        id: nextMsgId(),
         role: 'assistant',
         content: data.message,
         opsApplied,
@@ -240,7 +245,7 @@ export const useStore = create<BlueprintStore>((set, get) => ({
       set((s) => ({ chatMessages: [...s.chatMessages, assistantMsg] }));
     } catch (err) {
       const errorMsg: ChatMessage = {
-        id: `msg-${Date.now()}`,
+        id: nextMsgId(),
         role: 'assistant',
         content: `Error: ${err instanceof Error ? err.message : String(err)}`,
       };
@@ -291,7 +296,7 @@ export const useStore = create<BlueprintStore>((set, get) => ({
       const opsApplied = data.operations?.length ? applyOperations(data.operations) : 0;
       set((s) => ({
         chatMessages: [...s.chatMessages, {
-          id: `msg-${Date.now()}`,
+          id: nextMsgId(),
           role: 'assistant' as const,
           content: data.message,
           opsApplied,
@@ -302,7 +307,7 @@ export const useStore = create<BlueprintStore>((set, get) => ({
     } catch (err) {
       set((s) => ({
         chatMessages: [...s.chatMessages, {
-          id: `msg-${Date.now()}`,
+          id: nextMsgId(),
           role: 'assistant' as const,
           content: `Error: ${err instanceof Error ? err.message : String(err)}`,
         }],

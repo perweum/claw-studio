@@ -37,19 +37,25 @@ Everything else (Node.js, nanoclaw, Docker or Apple Container) is installed auto
 
 ## Installation
 
-### Option 1 — macOS App (easiest)
-
-[**Download Claw Studio.dmg**](https://github.com/perweum/claw-studio/releases/latest) → open it → drag to Applications → double-click to launch.
-
-> First launch: macOS may warn the app is unsigned. Right-click → **Open** → **Open** to allow it once.
-
-### Option 2 — One-line terminal install
+### Option 1 — One-line terminal install (recommended)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/perweum/claw-studio/main/install.sh | bash
 ```
 
-Both options will install nanoclaw and all dependencies automatically if they aren't already present, then open Claw Studio in your browser.
+This installs nanoclaw and all dependencies, then creates a **Claw Studio** app in `/Applications` with no Gatekeeper warnings — the app is assembled locally on your machine so macOS never quarantines it. Find it in Launchpad or Spotlight when the install finishes.
+
+### Option 2 — macOS App download
+
+[**Download Claw Studio.dmg**](https://github.com/perweum/claw-studio/releases/latest) → open it → drag **Claw Studio** to **Applications**.
+
+Because the app isn't notarized (that requires a $99/year Apple Developer account), macOS will block it on first open. To fix it, open Terminal and run:
+
+```bash
+xattr -cr /Applications/"Claw Studio.app"
+```
+
+Then double-click normally. You only need to do this once. The DMG also includes a helper file called **"If macOS blocks the app — click here.command"** that does the same thing automatically.
 
 On first launch, the setup wizard will:
 1. Confirm your nanoclaw installation (auto-detected in most cases)

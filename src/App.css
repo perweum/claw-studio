@@ -1802,3 +1802,4 @@ body {
   transition: opacity 0.15s;
 }
 .group-picker__channel-add-btn:hover { opacity: 0.75; }
+.group-picker__channel-add-btn--selected { opacity: 1; background: currentColor; color: #fff !important; }

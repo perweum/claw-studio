@@ -49,6 +49,7 @@ export function GroupPicker({ onClose, initialMode = 'list', onNewChannel }: Gro
   const [createError, setCreateError] = useState<string | null>(null);
   const [channels, setChannels] = useState<Array<{ jid: string; name: string; folder: string }>>([]);
   const [selectedChannelJid, setSelectedChannelJid] = useState('');
+  const [pendingChannel, setPendingChannel] = useState<{ label: string; skillMsg: string } | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -88,24 +89,12 @@ export function GroupPicker({ onClose, initialMode = 'list', onNewChannel }: Gro
     try {
       await createBot(name, selectedChannelJid || undefined);
       onClose();
+      if (pendingChannel) onNewChannel?.(pendingChannel.skillMsg);
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : String(err));
     } finally {
       setCreating(false);
     }
-  }
-
-  async function handleAddChannel(skillMsg: string) {
-    // Create the bot first if the user has typed a name
-    if (botName.trim()) {
-      try {
-        await createBot(botName.trim(), undefined);
-      } catch {
-        // Non-fatal — proceed to channel setup anyway
-      }
-    }
-    onClose();
-    onNewChannel?.(skillMsg);
   }
 
   return (
@@ -247,14 +236,19 @@ export function GroupPicker({ onClose, initialMode = 'list', onNewChannel }: Gro
                     {ADDABLE_CHANNELS.map(({ platform, label, color, skillMsg }) => (
                       <button
                         key={platform}
-                        className="group-picker__channel-add-btn"
+                        className={`group-picker__channel-add-btn ${pendingChannel?.label === label ? 'group-picker__channel-add-btn--selected' : ''}`}
                         style={{ borderColor: color + '66', color }}
-                        onClick={() => handleAddChannel(skillMsg)}
+                        onClick={() => setPendingChannel(p => p?.label === label ? null : { label, skillMsg })}
                       >
-                        + {label}
+                        {pendingChannel?.label === label ? '✓ ' : '+ '}{label}
                       </button>
                     ))}
                   </div>
+                  {pendingChannel && (
+                    <span className="group-picker__channel-confirm">
+                      The assistant will help you set up {pendingChannel.label} after the bot is created.
+                    </span>
+                  )}
                 </div>
               )}
             </div>

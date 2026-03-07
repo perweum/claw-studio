@@ -10,6 +10,21 @@ Claw Studio lets you design, configure, and deploy personal AI bots using a drag
 
 ---
 
+## What you can build
+
+| | |
+|---|---|
+| 🌅 **Morning briefings** | Weather, calendar, news, and exchange rates — delivered on a schedule to your phone |
+| 💬 **Channel bots** | Bots that respond on Telegram, WhatsApp, Slack, Discord, or email |
+| ⏰ **Scheduled automations** | Daily digests, weekly reports, reminders — any cron schedule |
+| 🔀 **Multi-agent pipelines** | Chain agents together with routing, conditions, and transforms |
+| 🧠 **Bots with memory** | Agents that remember context across conversations |
+| 🛠 **Tool-equipped agents** | Web search, shell commands, file access, MCP integrations |
+| 📣 **Push notifications** | Trigger phone alerts based on any condition or schedule |
+| 🤖 **Agent swarms** | Multiple agents collaborating in a single pipeline |
+
+---
+
 ## Features
 
 - **Visual pipeline editor** — drag-and-drop canvas powered by [React Flow](https://reactflow.dev), with minimap and keyboard shortcuts

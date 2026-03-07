@@ -2,9 +2,9 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { ToolNodeData } from '../types';
 
 const TOOL_ICONS: Record<string, string> = {
-  bash: '⚡',
-  search: '🔍',
-  mcp: '🔌',
+  bash: '▸',
+  search: '⌕',
+  mcp: '⇌',
 };
 
 // These MCP servers use OAuth — no API key placeholder needed

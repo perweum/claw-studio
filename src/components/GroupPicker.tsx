@@ -23,12 +23,20 @@ function formatBotName(folder: string): string {
   return folder.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+const ADDABLE_CHANNELS: Array<{ platform: string; label: string; color: string; skillMsg: string }> = [
+  { platform: 'telegram', label: 'Telegram', color: '#2ca5e0', skillMsg: 'I want to add a new Telegram channel to nanoclaw' },
+  { platform: 'slack',    label: 'Slack',    color: '#4a154b', skillMsg: 'I want to add a Slack channel to nanoclaw' },
+  { platform: 'whatsapp', label: 'WhatsApp', color: '#25d366', skillMsg: 'I want to add WhatsApp as a channel to nanoclaw' },
+  { platform: 'discord',  label: 'Discord',  color: '#5865f2', skillMsg: 'I want to add a Discord channel to nanoclaw' },
+];
+
 interface GroupPickerProps {
   onClose: () => void;
   initialMode?: 'list' | 'new';
+  onNewChannel?: (setupMessage: string) => void;
 }
 
-export function GroupPicker({ onClose, initialMode = 'list' }: GroupPickerProps) {
+export function GroupPicker({ onClose, initialMode = 'list', onNewChannel }: GroupPickerProps) {
   const { currentGroupFolder, openGroup, closeGroup, createBot } = useStore();
   const [mode, setMode] = useState<'list' | 'new'>(initialMode);
   const [groups, setGroups] = useState<GroupInfo[]>([]);
@@ -39,6 +47,8 @@ export function GroupPicker({ onClose, initialMode = 'list' }: GroupPickerProps)
   const [botName, setBotName] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [channels, setChannels] = useState<Array<{ jid: string; name: string; folder: string }>>([]);
+  const [selectedChannelJid, setSelectedChannelJid] = useState('');
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -47,6 +57,13 @@ export function GroupPicker({ onClose, initialMode = 'list' }: GroupPickerProps)
       .then((d) => setGroups(d.groups ?? []))
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/groups/channels')
+      .then((r) => r.json())
+      .then((d) => setChannels(d.channels ?? []))
+      .catch(() => {/* non-fatal */});
   }, []);
 
   useEffect(() => {
@@ -69,7 +86,7 @@ export function GroupPicker({ onClose, initialMode = 'list' }: GroupPickerProps)
     setCreating(true);
     setCreateError(null);
     try {
-      await createBot(name);
+      await createBot(name, selectedChannelJid || undefined);
       onClose();
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : String(err));
@@ -166,6 +183,67 @@ export function GroupPicker({ onClose, initialMode = 'list' }: GroupPickerProps)
             {createError && <p className="setup-wizard__error">{createError}</p>}
             <div className="group-picker__new-hint">
               Folder name: <code>{botName.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_-]/g, '') || '…'}</code>
+            </div>
+            <div className="group-picker__new-channel">
+              <label className="group-picker__new-channel-label">Output channel (optional)</label>
+              {channels.length > 0 ? (
+                <>
+                  <select
+                    className="group-picker__channel-select"
+                    value={selectedChannelJid}
+                    onChange={(e) => setSelectedChannelJid(e.target.value)}
+                  >
+                    <option value="">— none / set up later —</option>
+                    {channels.map((ch) => {
+                      const info = detectChannel(ch.folder);
+                      return (
+                        <option key={ch.jid} value={ch.jid}>
+                          {info ? `${info.label} · ` : ''}{ch.name}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  {selectedChannelJid && (() => {
+                    const ch = channels.find(c => c.jid === selectedChannelJid);
+                    const info = ch ? detectChannel(ch.folder) : null;
+                    return ch ? (
+                      <span className="group-picker__channel-confirm">
+                        ✓ Bot output will appear in your existing {info?.label ?? ''} chat: <strong>{ch.name}</strong>
+                      </span>
+                    ) : null;
+                  })()}
+                  {!selectedChannelJid && (
+                    <span className="group-picker__new-channel-hint">
+                      Needed if your bot has a schedule trigger — determines where output is sent.
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="group-picker__new-channel-hint">
+                  No channels connected yet. Set one up below to enable scheduled output.
+                </span>
+              )}
+
+              {/* New channel setup */}
+              {onNewChannel && (
+                <div className="group-picker__new-channel-setup">
+                  <span className="group-picker__new-channel-setup-label">
+                    {channels.length > 0 ? 'Or connect a new channel:' : 'Connect a channel:'}
+                  </span>
+                  <div className="group-picker__channel-btns">
+                    {ADDABLE_CHANNELS.map(({ platform, label, color, skillMsg }) => (
+                      <button
+                        key={platform}
+                        className="group-picker__channel-add-btn"
+                        style={{ borderColor: color + '66', color }}
+                        onClick={() => { onClose(); onNewChannel(skillMsg); }}
+                      >
+                        + {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div className="group-picker__new-actions">
               <button className="setup-wizard__skip" onClick={() => setMode('list')}>Back</button>

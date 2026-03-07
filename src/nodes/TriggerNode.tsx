@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { TriggerNodeData } from '../types';
 
-const ICONS: Record<string, string> = { message: '💬', schedule: '⏰', webhook: '🔗', manual: '▶' };
+const ICONS: Record<string, string> = { message: '◉', schedule: '◷', webhook: '⊕', manual: '▶' };
 
 const EMPTY_HINTS: Partial<Record<string, string>> = {
   schedule: 'Set a schedule — click to configure',

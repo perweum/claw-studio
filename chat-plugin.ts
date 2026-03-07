@@ -16,17 +16,17 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
 import { createRequire } from 'module';
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import Anthropic from '@anthropic-ai/sdk';
 import type { Plugin } from 'vite';
 
-// Load better-sqlite3 from nanoclaw's node_modules (not bundled in Blueprint UI)
+// Load better-sqlite3 from nanoclaw's node_modules (not bundled in Claw Studio)
 const _require = createRequire(import.meta.url);
 
 // ── Nanoclaw path detection ────────────────────────────────────────────────────
-// Blueprint UI can live anywhere — we find nanoclaw by:
+// Claw Studio can live anywhere — we find nanoclaw by:
 //   1. NANOCLAW_PATH env var
-//   2. NANOCLAW_PATH in Blueprint UI's own .env
+//   2. NANOCLAW_PATH in Claw Studio's own .env
 //   3. Auto-detection: walk up from CWD looking for nanoclaw markers
 
 const LOCAL_ENV_PATH = path.resolve(process.cwd(), '.env');
@@ -193,7 +193,7 @@ function writeEnvKey(key: string, value: string, nanoclawPath: string): string {
 
 // ── System prompt ─────────────────────────────────────────────────────────────
 
-const SYSTEM = `You are an AI assistant embedded in Blueprint UI — a visual node-based editor for designing AI agent pipelines. Your audience is primarily non-technical users who want to automate tasks with AI but don't write code.
+const SYSTEM = `You are an AI assistant embedded in Claw Studio — a visual node-based editor for designing AI agent pipelines. Your audience is primarily non-technical users who want to automate tasks with AI but don't write code.
 
 ## Node Types
 
@@ -283,18 +283,36 @@ Once all steps are done, save this blueprint and your bot is ready."
 
 ## MCP Tool Config Guidelines
 
+## Free Data Sources (no API key needed)
+
+**Weather & Air Quality — yr.no / MET Norway**
+Use a **bash tool** (not MCP) for weather. yr.no is free, open data (CC BY 4.0), requires no API key — just a User-Agent header.
+
+Weather forecast bash command:
+~~~
+CITY="Oslo, Norway"
+COORDS=$(curl -s -A "nanoclaw/1.0" "https://nominatim.openstreetmap.org/search?q=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$CITY'))")&format=json&limit=1" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['lat'], d[0]['lon'])")
+LAT=$(echo $COORDS | awk '{print $1}'); LON=$(echo $COORDS | awk '{print $2}')
+curl -s -A "nanoclaw/1.0" "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=$LAT&lon=$LON"
+~~~
+
+Air quality bash command (same pattern but endpoint: https://api.met.no/weatherapi/airqualityforecast/0.1/?lat=$LAT&lon=$LON)
+
+When a user asks for a weather or air quality pipeline, ALWAYS use the yr.no bash approach — tell them to change the CITY variable. Do NOT suggest OpenWeatherMap or any API-key-based weather service unless the user specifically asks for it.
+
+## MCP Tool Config Guidelines
+
 For MCP tools, config should look like:
 - Gmail: {"server": "gmail-mcp", "action": "list_emails", "query": "is:unread newer_than:1d"}
 - Google Calendar: {"server": "google-calendar-mcp", "action": "list_events", "timeframe": "today"}
 - iCal calendar (Outlook, Apple, Fastmail, etc.): {"server": "ical-calendar", "url": "https://...", "calendarName": "Work"}
-- Weather: {"server": "openweathermap-mcp", "action": "current_weather", "location": "YOUR_CITY", "apiKey": "YOUR_API_KEY"}
 - News: {"server": "newsapi-mcp", "action": "top_headlines", "category": "general", "apiKey": "YOUR_API_KEY"}
 
 IMPORTANT: Gmail and Google Calendar use OAuth — they NEVER need an API key in the config. Do NOT add apiKey, YOUR_API_KEY or any credential placeholder to gmail-mcp or google-calendar-mcp configs. OAuth is handled automatically by the system.
 
 For iCal calendars: use server "ical-calendar" with a "url" field containing the ICS link. The agent fetches it using curl — no MCP server or API key needed. Use one tool node per calendar.
 
-Only use placeholder values like YOUR_API_KEY for services that genuinely require an API key (Weather, News, etc.).
+Only use placeholder values like YOUR_API_KEY for services that genuinely require an API key (News, etc.).
 
 ## Response Format
 
@@ -542,6 +560,26 @@ async function handleGroups(req: IncomingMessage, res: ServerResponse): Promise<
     return;
   }
 
+  // ── GET /api/groups/channels — list channels available as output targets ──
+  if (req.method === 'GET' && parts[0] === 'channels') {
+    try {
+      const nanoclawPath = detectNanoclawPath();
+      if (!nanoclawPath) { res.writeHead(503); res.end(JSON.stringify({ error: 'Nanoclaw not found' })); return; }
+      const DB_PATH = path.join(nanoclawPath, 'store', 'messages.db');
+      if (!fs.existsSync(DB_PATH)) { res.writeHead(200); res.end(JSON.stringify({ channels: [] })); return; }
+      const Database = _require(path.join(nanoclawPath, 'node_modules', 'better-sqlite3'));
+      const db = new Database(DB_PATH, { readonly: true });
+      const rows = db.prepare('SELECT jid, name, folder FROM registered_groups WHERE jid NOT LIKE \'scheduled:%\' ORDER BY name').all() as Array<{ jid: string; name: string; folder: string }>;
+      db.close();
+      res.writeHead(200);
+      res.end(JSON.stringify({ channels: rows }));
+    } catch (err) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: String(err) }));
+    }
+    return;
+  }
+
   // ── POST /api/groups — create a new group folder ───────────────────────────
   if (req.method === 'POST' && parts.length === 0) {
     try {
@@ -564,8 +602,53 @@ async function handleGroups(req: IncomingMessage, res: ServerResponse): Promise<
         return;
       }
       fs.mkdirSync(groupDir, { recursive: true });
+
+      // If an output channel JID was provided, register the group immediately
+      if (body.channelJid) {
+        try {
+          const nanoclawPath = detectNanoclawPath();
+          if (nanoclawPath) {
+            const DB_PATH = path.join(nanoclawPath, 'store', 'messages.db');
+            if (fs.existsSync(DB_PATH)) {
+              const Database = _require(path.join(nanoclawPath, 'node_modules', 'better-sqlite3'));
+              const db = new Database(DB_PATH);
+              db.prepare(`
+                INSERT OR IGNORE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, requires_trigger, is_main, container_config)
+                VALUES (?, ?, ?, '@', datetime('now'), 0, 0, ?)
+              `).run(`scheduled:${folder}`, folder.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()), folder, JSON.stringify({ outputJid: body.channelJid }));
+              db.close();
+            }
+          }
+        } catch { /* registration is best-effort */ }
+      }
+
       res.writeHead(200);
       res.end(JSON.stringify({ ok: true, folder }));
+    } catch (err) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: String(err) }));
+    }
+    return;
+  }
+
+  // ── POST /api/groups/:folder/register — register an existing group ─────────
+  if (req.method === 'POST' && parts.length === 2 && parts[1] === 'register') {
+    try {
+      const body = JSON.parse(await readBody(req)) as { channelJid: string };
+      if (!body.channelJid) { res.writeHead(400); res.end(JSON.stringify({ error: 'channelJid required' })); return; }
+      const nanoclawPath = detectNanoclawPath();
+      if (!nanoclawPath) { res.writeHead(503); res.end(JSON.stringify({ error: 'Nanoclaw not found' })); return; }
+      const DB_PATH = path.join(nanoclawPath, 'store', 'messages.db');
+      const Database = _require(path.join(nanoclawPath, 'node_modules', 'better-sqlite3'));
+      const db = new Database(DB_PATH);
+      const displayName = folder.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+      db.prepare(`
+        INSERT OR REPLACE INTO registered_groups (jid, name, folder, trigger_pattern, added_at, requires_trigger, is_main, container_config)
+        VALUES (?, ?, ?, '@', datetime('now'), 0, 0, ?)
+      `).run(`scheduled:${folder}`, displayName, folder, JSON.stringify({ outputJid: body.channelJid }));
+      db.close();
+      res.writeHead(200);
+      res.end(JSON.stringify({ ok: true }));
     } catch (err) {
       res.writeHead(500);
       res.end(JSON.stringify({ error: String(err) }));
@@ -693,7 +776,7 @@ async function handleGroups(req: IncomingMessage, res: ServerResponse): Promise<
         if (registered) {
           done.push(`Schedule registered: "${cronExpr}" — runs automatically`);
         } else {
-          manual.push(`Schedule "${cronExpr}" — group must be registered in nanoclaw first. Run the service and register the group, then redeploy.`);
+          manual.push(`__UNREGISTERED_SCHEDULE__:${cronExpr}`);
         }
       }
 
@@ -783,12 +866,17 @@ function tryRegisterSchedule(folder: string, cronExpr: string, taskLabel: string
     const Database = _require(path.join(NANOCLAW_MODULES, 'better-sqlite3'));
     const db = new Database(DB_PATH);
 
-    // Look up the group's JID
-    const group = db.prepare('SELECT jid FROM registered_groups WHERE folder = ?').get(folder) as { jid: string } | undefined;
+    // Look up the group's JID — prefer outputJid from container_config for schedule-only bots
+    const group = db.prepare('SELECT jid, container_config FROM registered_groups WHERE folder = ?').get(folder) as { jid: string; container_config?: string } | undefined;
     if (!group) {
       db.close();
       return false;
     }
+    let chatJid = group.jid;
+    try {
+      const cfg = group.container_config ? JSON.parse(group.container_config) as { outputJid?: string } : {};
+      if (cfg.outputJid) chatJid = cfg.outputJid;
+    } catch { /* ignore */ }
 
     // Use folder+cron as a stable task ID so re-deploys are idempotent
     const taskId = `blueprint:${folder}:${cronExpr.replace(/\s+/g, '_')}`;
@@ -798,7 +886,7 @@ function tryRegisterSchedule(folder: string, cronExpr: string, taskLabel: string
       INSERT INTO scheduled_tasks (id, group_folder, chat_jid, prompt, schedule_type, schedule_value, context_mode, next_run, status, created_at)
       VALUES (?, ?, ?, ?, 'cron', ?, 'isolated', ?, 'active', ?)
       ON CONFLICT(id) DO UPDATE SET schedule_value=excluded.schedule_value, status='active'
-    `).run(taskId, folder, group.jid, taskLabel, cronExpr, now, now);
+    `).run(taskId, folder, chatJid, taskLabel, cronExpr, now, now);
 
     db.close();
     return true;
@@ -1024,6 +1112,56 @@ function generateClaudeMd(
 
 // ── Plugin ────────────────────────────────────────────────────────────────────
 
+// ── Backup ─────────────────────────────────────────────────────────────────────
+
+async function handleBackup(_req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const nanoclawPath = detectNanoclawPath();
+  if (!nanoclawPath) {
+    res.writeHead(503, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Nanoclaw not found — configure NANOCLAW_PATH first' }));
+    return;
+  }
+
+  const date = new Date().toISOString().slice(0, 10);
+  const filename = `claw-studio-backup-${date}.zip`;
+
+  // Items to include, relative to nanoclawPath
+  const items: string[] = [];
+  const candidates = [
+    'groups',
+    'store/messages.db',
+    '.env',
+    'data/env/env',
+    'data/session',
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(path.join(nanoclawPath, c))) items.push(c);
+  }
+
+  if (items.length === 0) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Nothing to back up — no groups or database found' }));
+    return;
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'application/zip',
+    'Content-Disposition': `attachment; filename="${filename}"`,
+  });
+
+  // Stream zip directly to response
+  const zip = spawn('zip', ['-r', '-', ...items], { cwd: nanoclawPath });
+  zip.stdout.pipe(res);
+  zip.stderr.on('data', (d: Buffer) => console.error('[backup]', d.toString()));
+  zip.on('error', (err) => {
+    console.error('[backup] spawn error:', err);
+    if (!res.headersSent) {
+      res.writeHead(500);
+      res.end('zip command failed');
+    }
+  });
+}
+
 export function chatPlugin(): Plugin {
   return {
     name: 'blueprint-chat-api',
@@ -1084,6 +1222,15 @@ export function chatPlugin(): Plugin {
             res.writeHead(500);
             res.end(JSON.stringify({ error: String(err) }));
           }
+        });
+      });
+
+      // Backup API
+      server.middlewares.use('/api/backup', (req: IncomingMessage, res: ServerResponse) => {
+        if (req.method !== 'GET') { res.writeHead(405); res.end(); return; }
+        handleBackup(req, res).catch((err) => {
+          console.error('[backup-api]', err);
+          if (!res.headersSent) { res.writeHead(500); res.end(JSON.stringify({ error: String(err) })); }
         });
       });
     },

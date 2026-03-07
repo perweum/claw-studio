@@ -1,7 +1,7 @@
 {
-  "name": "blueprint-ui",
+  "name": "claw-studio",
   "version": "0.1.0",
-  "description": "Visual node editor for designing nanoclaw AI agent pipelines",
+  "description": "Visual AI agent builder for nanoclaw",
   "private": true,
   "type": "module",
   "scripts": {

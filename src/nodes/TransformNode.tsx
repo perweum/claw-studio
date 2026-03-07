@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { TransformNodeData } from '../types';
 
-const ICONS: Record<string, string> = { template: '📝', truncate: '✂️', json_wrap: '{ }', extract: '🔍' };
+const ICONS: Record<string, string> = { template: '≡', truncate: '⋯', json_wrap: '{ }', extract: '⌕' };
 
 export function TransformNode({ data, selected }: NodeProps) {
   const d = data as unknown as TransformNodeData;

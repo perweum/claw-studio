@@ -1,6 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store';
 import { NODE_KIND_META, type NodeKind } from '../types';
+
+const CHANNEL_LABELS: Record<string, string> = {
+  telegram: 'Telegram', slack: 'Slack', whatsapp: 'WhatsApp',
+  discord: 'Discord', github: 'GitHub', gmail: 'Gmail',
+};
+
+function detectChannelLabel(folder: string): string | null {
+  for (const [prefix, label] of Object.entries(CHANNEL_LABELS)) {
+    if (folder === prefix || folder.startsWith(prefix + '_')) return label;
+  }
+  return null;
+}
 
 const PRIMARY_KINDS: NodeKind[] = ['agent', 'tool', 'router', 'output'];
 const PRIMARY_STYLE: Record<string, string> = {
@@ -33,8 +45,21 @@ export function Toolbar({ onOpenPalette, onOpenGroupPicker, onNewBot }: ToolbarP
   const [deployPreview, setDeployPreview] = useState<string | null>(null);
   const [deployError, setDeployError] = useState<string | null>(null);
   const [deployActions, setDeployActions] = useState<{ done: string[]; manual: string[] } | null>(null);
+  const [channels, setChannels] = useState<Array<{ jid: string; name: string; folder: string }>>([]);
+  const [scheduleChannelJids, setScheduleChannelJids] = useState<Record<string, string>>({});
+  const [registeringSchedule, setRegisteringSchedule] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const hasAgentNode = nodes.some(n => n.type === 'agent');
+
+  // Load channels for schedule registration
+  useEffect(() => {
+    fetch('/api/groups/channels')
+      .then(r => r.json())
+      .then(d => setChannels(d.channels ?? []))
+      .catch(() => {/* non-fatal */});
+  }, []);
 
   // Cmd+S to save
   useEffect(() => {
@@ -47,6 +72,44 @@ export function Toolbar({ onOpenPalette, onOpenGroupPicker, onNewBot }: ToolbarP
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [currentGroupFolder, saveCurrentGroup]);
+
+  async function handleRegisterAndRedeploy(cronExpr: string) {
+    if (!currentGroupFolder) return;
+    const channelJid = scheduleChannelJids[cronExpr];
+    if (!channelJid) return;
+    setRegisteringSchedule(cronExpr);
+    try {
+      await fetch(`/api/groups/${currentGroupFolder}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelJid }),
+      });
+      // Re-deploy now that the group is registered
+      setDeployState('idle');
+      setRegisteringSchedule(null);
+      await handleDeploy();
+    } catch {
+      setRegisteringSchedule(null);
+    }
+  }
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    function onPointerDown(e: PointerEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    if (menuOpen) document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [menuOpen]);
+
+  function handleBackup() {
+    setMenuOpen(false);
+    const a = document.createElement('a');
+    a.href = '/api/backup';
+    a.click();
+  }
 
   async function handleDeploy() {
     setDeployState('deploying');
@@ -68,7 +131,7 @@ export function Toolbar({ onOpenPalette, onOpenGroupPicker, onNewBot }: ToolbarP
     <>
       <div className="toolbar">
         <div className="toolbar__left">
-          <span className="toolbar__logo">◈ Blueprint</span>
+          <span className="toolbar__logo">◈ Claw Studio</span>
           <button
             className={`toolbar__group-btn ${currentGroupFolder ? 'toolbar__group-btn--active' : ''}`}
             onClick={onOpenGroupPicker}
@@ -130,6 +193,25 @@ export function Toolbar({ onOpenPalette, onOpenGroupPicker, onNewBot }: ToolbarP
               Export
             </button>
           )}
+
+          {/* Overflow menu */}
+          <div className="toolbar__menu-wrap" ref={menuRef}>
+            <button
+              className={`toolbar__btn btn-secondary toolbar__menu-btn ${menuOpen ? 'toolbar__menu-btn--open' : ''}`}
+              onClick={() => setMenuOpen(o => !o)}
+              title="More options"
+            >
+              ⋯
+            </button>
+            {menuOpen && (
+              <div className="toolbar__menu">
+                <button className="toolbar__menu-item" onClick={handleBackup}>
+                  <span className="toolbar__menu-icon">↓</span>
+                  Back up all bots
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -165,11 +247,51 @@ export function Toolbar({ onOpenPalette, onOpenGroupPicker, onNewBot }: ToolbarP
                         <div>
                           <div className="deploy-modal__section-label">Still needs your attention</div>
                           <ul className="deploy-modal__action-list">
-                            {deployActions.manual.map((item, i) => (
-                              <li key={i} className="deploy-modal__action-manual">
-                                <span>!</span><span>{item}</span>
-                              </li>
-                            ))}
+                            {deployActions.manual.map((item, i) => {
+                              const scheduleMatch = item.match(/^__UNREGISTERED_SCHEDULE__:(.+)$/);
+                              if (scheduleMatch) {
+                                const cronExpr = scheduleMatch[1];
+                                const selectedJid = scheduleChannelJids[cronExpr] ?? '';
+                                const isRegistering = registeringSchedule === cronExpr;
+                                return (
+                                  <li key={i} className="deploy-modal__action-schedule">
+                                    <div className="deploy-modal__schedule-header">
+                                      <span className="deploy-modal__action-icon">!</span>
+                                      <span>Schedule <code>{cronExpr}</code> — choose an output channel to activate</span>
+                                    </div>
+                                    <div className="deploy-modal__schedule-fix">
+                                      <select
+                                        className="deploy-modal__channel-select"
+                                        value={selectedJid}
+                                        onChange={e => setScheduleChannelJids(prev => ({ ...prev, [cronExpr]: e.target.value }))}
+                                      >
+                                        <option value="">— select channel —</option>
+                                        {channels.map(ch => {
+                                          const label = detectChannelLabel(ch.folder);
+                                          return (
+                                            <option key={ch.jid} value={ch.jid}>
+                                              {label ? `${label} · ` : ''}{ch.name}
+                                            </option>
+                                          );
+                                        })}
+                                      </select>
+                                      <button
+                                        className="deploy-modal__register-btn"
+                                        disabled={!selectedJid || isRegistering}
+                                        onClick={() => handleRegisterAndRedeploy(cronExpr)}
+                                      >
+                                        {isRegistering ? 'Registering…' : 'Register & Redeploy'}
+                                      </button>
+                                    </div>
+                                  </li>
+                                );
+                              }
+                              return (
+                                <li key={i} className="deploy-modal__action-manual">
+                                  <span>!</span><span>{item}</span>
+                                </li>
+                              );
+                            })}
                           </ul>
                         </div>
                       </>

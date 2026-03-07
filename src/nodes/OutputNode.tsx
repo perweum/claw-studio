@@ -2,9 +2,9 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { OutputNodeData } from '../types';
 
 const DEST_ICONS: Record<string, string> = {
-  telegram: '✈️',
-  file: '📄',
-  webhook: '🔗',
+  telegram: '→',
+  file: '▤',
+  webhook: '⊕',
 };
 
 export function OutputNode({ data, selected }: NodeProps) {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from '../store';
 import type {
   AgentModel, BlueprintNodeData, ConditionType, FilePermission,
@@ -72,7 +72,7 @@ const MCP_SERVICE_PRESETS: Array<{ label: string; server: string; defaultConfig:
   { label: 'Gmail',                server: 'gmail-mcp',           defaultConfig: { server: 'gmail-mcp', action: 'list_emails', query: 'is:unread newer_than:1d' } },
   { label: 'Google Calendar',      server: 'google-calendar-mcp', defaultConfig: { server: 'google-calendar-mcp', action: 'list_events', timeframe: 'today' } },
   { label: 'Calendar (iCal link)', server: 'ical-calendar',       defaultConfig: { server: 'ical-calendar', url: '', calendarName: 'My Calendar' } },
-  { label: 'Weather',              server: 'openweathermap-mcp',  defaultConfig: { server: 'openweathermap-mcp', action: 'current_weather', location: 'YOUR_CITY', apiKey: 'YOUR_API_KEY' } },
+  { label: 'Weather (OpenWeatherMap)', server: 'openweathermap-mcp', defaultConfig: { server: 'openweathermap-mcp', action: 'current_weather', location: 'YOUR_CITY', apiKey: 'YOUR_API_KEY' } },
   { label: 'News headlines',       server: 'newsapi-mcp',         defaultConfig: { server: 'newsapi-mcp', action: 'top_headlines', category: 'general', apiKey: 'YOUR_API_KEY' } },
 ];
 
@@ -249,24 +249,28 @@ function HelpText({ children }: { children: string }) {
 // ── Main NodePanel ──────────────────────────────────────────────────────────
 export function NodePanel() {
   const { nodes, selectedNodeId, selectNode, updateNodeData, deleteNode } = useStore();
+  const [customCronMode, setCustomCronMode] = useState(false);
 
-  if (!selectedNodeId) {
-    return (
-      <div className="node-panel node-panel--empty">
-        <p>Select a node to edit its settings.</p>
-        <p className="node-panel__hint">Right-click a node for more options</p>
-      </div>
+  // When selected node changes, derive whether it already has a custom cron
+  useEffect(() => {
+    const d = nodes.find(n => n.id === selectedNodeId)?.data as BlueprintNodeData | undefined;
+    setCustomCronMode(
+      d?.kind === 'trigger' &&
+      !!(d as { config?: string }).config &&
+      !SCHEDULE_PRESETS.some(p => p.cron === (d as { config?: string }).config)
     );
-  }
+  }, [selectedNodeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const node = nodes.find((n) => n.id === selectedNodeId);
-  if (!node) return null;
-
-  const data = node.data as BlueprintNodeData;
-  const update = (patch: Partial<BlueprintNodeData>) => updateNodeData(selectedNodeId, patch);
+  const node = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) : null;
+  const isOpen = !!node;
+  const data = node?.data as BlueprintNodeData | undefined;
+  const update = (patch: Partial<BlueprintNodeData>) => {
+    if (selectedNodeId) updateNodeData(selectedNodeId, patch);
+  };
 
   return (
-    <div className="node-panel">
+    <div className={`node-panel ${isOpen ? 'node-panel--open' : ''}`}>
+    {isOpen && data && (<>
       <div className="node-panel__header">
         <span className={`node-panel__kind-badge kind--${data.kind}`}>{data.kind.toUpperCase()}</span>
         <button className="node-panel__close" onClick={() => selectNode(null)}>✕</button>
@@ -304,9 +308,15 @@ export function NodePanel() {
               <div className="node-panel__field">
                 <label>When should this run?</label>
                 <select
-                  value={SCHEDULE_PRESETS.find(p => p.cron === data.config)?.cron ?? (data.config ? '__custom__' : '')}
+                  value={customCronMode ? '__custom__' : (SCHEDULE_PRESETS.find(p => p.cron === data.config)?.cron ?? '')}
                   onChange={(e) => {
-                    if (e.target.value !== '__custom__') update({ config: e.target.value } as Partial<BlueprintNodeData>);
+                    if (e.target.value === '__custom__') {
+                      setCustomCronMode(true);
+                      // Don't touch config — user will edit it in the custom input below
+                    } else {
+                      setCustomCronMode(false);
+                      update({ config: e.target.value } as Partial<BlueprintNodeData>);
+                    }
                   }}
                 >
                   <option value="">— pick a schedule —</option>
@@ -317,12 +327,13 @@ export function NodePanel() {
                 </select>
                 <HelpText>Choose how often the bot should run automatically.</HelpText>
               </div>
-              {(data.config && !SCHEDULE_PRESETS.find(p => p.cron === data.config)) && (
+              {customCronMode && (
                 <div className="node-panel__field">
                   <label>Custom schedule (cron expression)</label>
                   <input
                     value={data.config}
                     placeholder="0 8 * * 1-5"
+                    autoFocus
                     onChange={(e) => update({ config: e.target.value } as Partial<BlueprintNodeData>)}
                   />
                   <HelpText>Format: minute hour day month weekday. Example: "0 8 * * 1-5" = weekdays at 8am.</HelpText>
@@ -450,6 +461,12 @@ export function NodePanel() {
                 onChange={(e) => update({ config: e.target.value } as Partial<BlueprintNodeData>)}
               />
               <HelpText>The agent will run this command in its sandbox and use the output as information. You can run scripts, fetch URLs, or check system info.</HelpText>
+              {!data.config && (
+                <div className="node-panel__field--info" style={{ marginTop: 6 }}>
+                  <span className="field-info-icon">💡</span>
+                  <span>Need weather or air quality data? Load a preset above — yr.no provides free global forecasts with no API key.</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -738,8 +755,9 @@ export function NodePanel() {
       )}
 
       <div className="node-panel__footer">
-        <button className="btn-danger" onClick={() => deleteNode(selectedNodeId)}>Delete Node</button>
+        <button className="btn-danger" onClick={() => deleteNode(selectedNodeId!)}>Delete Node</button>
       </div>
+    </>)}
     </div>
   );
 }

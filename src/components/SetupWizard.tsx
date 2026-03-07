@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 interface SetupWizardProps {
-  onDone: () => void;
+  onDone: (openNewBot?: boolean) => void;
 }
 
 type Step = 'path' | 'apikey';
@@ -10,6 +10,7 @@ export function SetupWizard({ onDone }: SetupWizardProps) {
   const [steps, setSteps] = useState<Step[]>([]);
   const [stepIdx, setStepIdx] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [hadSteps, setHadSteps] = useState(false);
 
   // Path step state
   const [detectedPath, setDetectedPath] = useState<string | null>(null);
@@ -32,6 +33,7 @@ export function SetupWizard({ onDone }: SetupWizardProps) {
       if (!config.configured) needed.push('apikey');
       if (setup.path) setDetectedPath(setup.path);
       setSteps(needed);
+      setHadSteps(needed.length > 0);
       setLoading(false);
       if (needed.length === 0) onDone();
     });
@@ -93,17 +95,21 @@ export function SetupWizard({ onDone }: SetupWizardProps) {
     if (stepIdx + 1 < steps.length) {
       setStepIdx((i) => i + 1);
     } else {
-      onDone();
+      setSteps((s) => s.slice(0, stepIdx + 1)); // keep steps for numbering, clear current
+      setStepIdx((i) => i + 1); // move past last step → currentStep becomes undefined
     }
   }
 
   if (loading) return null;
 
+  const totalSteps = hadSteps ? steps.length + 1 : 1; // +1 for the "create your first bot" step
+  const nextStepNum = steps.length + 1;
+
   return (
     <div className="setup-wizard-backdrop">
       <div className="setup-wizard">
         <div className="setup-wizard__header">
-          <div className="setup-wizard__logo">◈ Blueprint</div>
+          <div className="setup-wizard__logo">◈ Claw Studio</div>
           <div className="setup-wizard__subtitle">
             Let's get your AI assistant set up.<br />
             This only takes a minute.
@@ -124,10 +130,24 @@ export function SetupWizard({ onDone }: SetupWizardProps) {
                   <br />Confirm this is correct, or enter a different path below.
                 </p>
               ) : (
-                <p className="setup-wizard__step-desc">
-                  Blueprint needs to know where nanoclaw is installed. Enter the full path to
-                  your nanoclaw directory (the one that contains a <code style={{ fontFamily: 'monospace', fontSize: '11px' }}>groups/</code> folder).
-                </p>
+                <>
+                  <p className="setup-wizard__step-desc">
+                    Claw Studio needs to know where nanoclaw is installed. Enter the full path to
+                    your nanoclaw folder (it contains a <code style={{ fontFamily: 'monospace', fontSize: '11px' }}>groups/</code> folder inside).
+                  </p>
+                  <p className="setup-wizard__step-desc" style={{ marginTop: 6 }}>
+                    Don't have nanoclaw yet?{' '}
+                    <a
+                      href="https://github.com/nanoclaw-ai/nanoclaw"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="setup-wizard__link"
+                    >
+                      Install it here
+                    </a>{' '}
+                    first, then come back.
+                  </p>
+                </>
               )}
               <input
                 className="setup-wizard__input"
@@ -150,9 +170,19 @@ export function SetupWizard({ onDone }: SetupWizardProps) {
                 <span className="setup-wizard__step-title">Add your Anthropic API key</span>
               </div>
               <p className="setup-wizard__step-desc">
-                This is how Blueprint connects to Claude AI. Get your key from{' '}
-                <strong>console.anthropic.com</strong> → API Keys → Create Key.
-                It looks like <code style={{ fontFamily: 'monospace', fontSize: '11px' }}>sk-ant-api03-…</code>
+                This is what lets the AI assistant and your bots use Claude. Get your key from{' '}
+                <a
+                  href="https://console.anthropic.com/settings/keys"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="setup-wizard__link"
+                >
+                  console.anthropic.com
+                </a>{' '}
+                → API Keys → Create Key.
+              </p>
+              <p className="setup-wizard__step-desc" style={{ marginTop: 6 }}>
+                You'll need a free account. Usage is pay-as-you-go — typical bot usage costs a few cents a day.
               </p>
               <input
                 className="setup-wizard__input"
@@ -171,32 +201,32 @@ export function SetupWizard({ onDone }: SetupWizardProps) {
           {!currentStep && (
             <div className="setup-wizard__step">
               <div className="setup-wizard__step-header">
-                <span className="setup-wizard__step-num" style={{ background: 'var(--accent)', color: '#fff' }}>✓</span>
+                <span className="setup-wizard__step-num" style={{ background: 'var(--accent-output)', color: '#fff', border: 'none' }}>✓</span>
                 <span className="setup-wizard__step-title">All set!</span>
               </div>
               <p className="setup-wizard__step-desc">
-                Blueprint is ready. Use <strong>Open group…</strong> to load a nanoclaw group,
-                then describe what you want your bot to do.
+                Claw Studio is connected and ready. Click <strong>Create your first bot</strong> to get started,
+                or explore the canvas on your own.
               </p>
             </div>
           )}
 
-          <div className="setup-wizard__step" style={{ opacity: 0.5 }}>
-            <div className="setup-wizard__step-header">
-              <span className="setup-wizard__step-num" style={{ background: 'var(--surface-2)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
-                {steps.length + 1}
-              </span>
-              <span className="setup-wizard__step-title" style={{ color: 'var(--text-muted)' }}>Open a group and describe your bot</span>
+          {/* Next step preview — only shown while steps remain */}
+          {currentStep && (
+            <div className="setup-wizard__step setup-wizard__step--preview">
+              <div className="setup-wizard__step-header">
+                <span className="setup-wizard__step-num setup-wizard__step-num--dim">{nextStepNum}</span>
+                <span className="setup-wizard__step-title setup-wizard__step-title--dim">Create your first bot</span>
+              </div>
+              <p className="setup-wizard__step-desc setup-wizard__step-desc--dim">
+                Name your bot, connect a channel (Telegram, WhatsApp, Slack…), and describe what it should do.
+              </p>
             </div>
-            <p className="setup-wizard__step-desc">
-              Use <strong>Open group…</strong> in the toolbar to load a nanoclaw group.
-              Then use the AI chat to design your bot — just describe what you want it to do.
-            </p>
-          </div>
+          )}
         </div>
 
         <div className="setup-wizard__footer">
-          <button className="setup-wizard__skip" onClick={onDone}>
+          <button className="setup-wizard__skip" onClick={() => onDone()}>
             Skip for now
           </button>
           {currentStep === 'path' && (
@@ -214,12 +244,12 @@ export function SetupWizard({ onDone }: SetupWizardProps) {
               onClick={handleApiKeySubmit}
               disabled={keySaving || !apiKey.trim()}
             >
-              {keySaving ? 'Saving…' : 'Save & Start'}
+              {keySaving ? 'Saving…' : 'Save & continue'}
             </button>
           )}
           {!currentStep && (
-            <button className="setup-wizard__submit" onClick={onDone}>
-              Get started
+            <button className="setup-wizard__submit" onClick={() => onDone(true)}>
+              Create your first bot →
             </button>
           )}
         </div>

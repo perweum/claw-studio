@@ -66,6 +66,7 @@ export default function App() {
   const [groupPickerMode, setGroupPickerMode] = useState<'list' | 'new'>('list');
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
   const [showWizard, setShowWizard] = useState(false);
+  const [chatPrefill, setChatPrefill] = useState<string | null>(null);
 
   useEffect(() => {
     // Show wizard if nanoclaw path or API key is not configured
@@ -102,24 +103,33 @@ export default function App() {
           onNewBot={() => { setGroupPickerMode('new'); setGroupPickerOpen(true); }}
         />
         <div className="app__body">
-          <div className="app__main">
-            <div className="app__canvas">
-              <Canvas
-                onContextMenu={(ctx) => {
-                  setCtxMenu(ctx);
-                  setPaletteOpen(false);
-                }}
-              />
-            </div>
-            <ChatPanel />
+          <ChatPanel prefill={chatPrefill} onPrefillUsed={() => setChatPrefill(null)} />
+          <div className="app__canvas">
+            <Canvas
+              onContextMenu={(ctx) => {
+                setCtxMenu(ctx);
+                setPaletteOpen(false);
+              }}
+            />
           </div>
           <NodePanel />
         </div>
       </div>
 
-      {showWizard && <SetupWizard onDone={() => setShowWizard(false)} />}
+      {showWizard && (
+        <SetupWizard onDone={(openNewBot) => {
+          setShowWizard(false);
+          if (openNewBot) { setGroupPickerMode('new'); setGroupPickerOpen(true); }
+        }} />
+      )}
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} />}
-      {groupPickerOpen && <GroupPicker onClose={() => setGroupPickerOpen(false)} initialMode={groupPickerMode} />}
+      {groupPickerOpen && (
+        <GroupPicker
+          onClose={() => setGroupPickerOpen(false)}
+          initialMode={groupPickerMode}
+          onNewChannel={(msg) => { setGroupPickerOpen(false); setChatPrefill(msg); }}
+        />
+      )}
       {ctxMenu && (
         <ContextMenu
           x={ctxMenu.x}

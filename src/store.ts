@@ -90,7 +90,7 @@ interface BlueprintStore {
   confirmPendingCommand: (msgId: string) => Promise<void>;
   cancelPendingCommand: (msgId: string) => void;
 
-  createBot: (displayName: string) => Promise<string>;
+  createBot: (displayName: string, channelJid?: string) => Promise<string>;
   fetchGroups: () => Promise<GroupInfo[]>;
   openGroup: (folder: string) => Promise<void>;
   saveCurrentGroup: () => Promise<void>;
@@ -322,11 +322,11 @@ export const useStore = create<BlueprintStore>((set, get) => ({
 
   // ── Group persistence ───────────────────────────────────────────────────────
 
-  createBot: async (displayName: string) => {
+  createBot: async (displayName: string, channelJid?: string) => {
     const res = await fetch('/api/groups', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: displayName }),
+      body: JSON.stringify({ name: displayName, channelJid }),
     });
     const data = await res.json() as { ok?: boolean; folder?: string; error?: string };
     if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);

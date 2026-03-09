@@ -82,6 +82,9 @@ function detectNanoclawPath(): string | null {
     if (parent === dir) break;
     dir = parent;
   }
+  // Well-known default location — covers standalone install alongside ~/nanoclaw
+  const defaultPath = path.join(process.env.HOME ?? '', 'nanoclaw');
+  if (isNanoclawDir(defaultPath)) { _nanoclawPathCache = defaultPath; return _nanoclawPathCache; }
   _nanoclawPathCache = null;
   return null;
 }

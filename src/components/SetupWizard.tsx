@@ -138,7 +138,7 @@ export function SetupWizard({ onDone }: SetupWizardProps) {
                   <p className="setup-wizard__step-desc" style={{ marginTop: 6 }}>
                     Don't have nanoclaw yet?{' '}
                     <a
-                      href="https://github.com/nanoclaw-ai/nanoclaw"
+                      href="https://github.com/qwibitai/nanoclaw"
                       target="_blank"
                       rel="noreferrer"
                       className="setup-wizard__link"

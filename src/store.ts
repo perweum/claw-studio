@@ -2,6 +2,7 @@ import {
   addEdge,
   applyEdgeChanges,
   applyNodeChanges,
+  reconnectEdge as rfReconnectEdge,
   type Connection,
   type Edge,
   type EdgeChange,
@@ -129,6 +130,7 @@ export interface GroupInfo {
   folder: string;
   hasBlueprint: boolean;
   hasClaude: boolean;
+  swarmChildren?: string[];
 }
 
 export interface ChannelInfo {
@@ -168,6 +170,7 @@ interface BlueprintStore {
   onNodesChange: (changes: NodeChange[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
   onConnect: (connection: Connection) => void;
+  onReconnect: (oldEdge: Edge, newConnection: Connection) => void;
   addNode: (kind: NodeKind, position?: { x: number; y: number }) => void;
   selectNode: (id: string | null) => void;
   updateNodeData: (id: string, patch: Partial<BlueprintNodeData>) => void;
@@ -264,23 +267,105 @@ export const useStore = create<BlueprintStore>((set, get) => ({
 
   onEdgesChange: (changes) =>
     set((s) => {
-      const hasRemove = changes.some((c) => c.type === 'remove');
+      const removedIds = changes.filter((c) => c.type === 'remove').map((c) => (c as { id: string }).id);
+      const hasRemove = removedIds.length > 0;
+
+      // Revert Output nodes whose cross-bot edge was deleted
+      let nodes = s.nodes;
+      if (hasRemove) {
+        const removedEdges = s.edges.filter((e) => removedIds.includes(e.id));
+        for (const edge of removedEdges) {
+          const sourceNode = s.nodes.find((n) => n.id === edge.source);
+          const targetNode = s.nodes.find((n) => n.id === edge.target);
+          if (sourceNode?.data.kind === 'output' && targetNode?.type === 'swimlane') {
+            nodes = nodes.map((n) =>
+              n.id === sourceNode.id
+                ? { ...n, data: { ...n.data, destination: 'telegram' as const, targetFolder: undefined } }
+                : n,
+            );
+          }
+        }
+      }
+
       return {
         ...(hasRemove ? withHistoryPush(s) : {}),
         edges: applyEdgeChanges(changes, s.edges),
+        nodes,
         saveStatus: s.currentGroupFolder ? 'unsaved' : s.saveStatus,
         ...(hasRemove ? { canUndo: true, canRedo: false } : {}),
       };
     }),
 
   onConnect: (connection) =>
-    set((s) => ({
-      ...withHistoryPush(s),
-      edges: addEdge({ ...connection, animated: true }, s.edges),
-      saveStatus: s.currentGroupFolder ? 'unsaved' : s.saveStatus,
-      canUndo: true,
-      canRedo: false,
-    })),
+    set((s) => {
+      const sourceNode = s.nodes.find((n) => n.id === connection.source);
+      const targetNode = s.nodes.find((n) => n.id === connection.target);
+      const isCrossBot = sourceNode?.data.kind === 'output' && targetNode?.type === 'swimlane';
+
+      const newEdges = addEdge({ ...connection, animated: true }, s.edges);
+
+      // Auto-configure the Output node when connected to a Swimlane
+      let nodes = s.nodes;
+      if (isCrossBot && sourceNode && targetNode) {
+        const targetFolder = (targetNode.data as import('./types').SwimlaneNodeData).groupFolder;
+        nodes = s.nodes.map((n) =>
+          n.id === sourceNode.id
+            ? { ...n, data: { ...n.data, destination: 'agent_handoff' as const, targetFolder } }
+            : n,
+        );
+      }
+
+      return {
+        ...withHistoryPush(s),
+        edges: newEdges,
+        nodes,
+        saveStatus: s.currentGroupFolder ? 'unsaved' : s.saveStatus,
+        canUndo: true,
+        canRedo: false,
+      };
+    }),
+
+  onReconnect: (oldEdge, newConnection) =>
+    set((s) => {
+      // Revert Output node if the old edge was a cross-bot handoff
+      const oldSource = s.nodes.find((n) => n.id === oldEdge.source);
+      const oldTarget = s.nodes.find((n) => n.id === oldEdge.target);
+      const wasHandoff = oldSource?.data.kind === 'output' && oldTarget?.type === 'swimlane';
+
+      const newTarget = s.nodes.find((n) => n.id === newConnection.target);
+      const isHandoff = oldSource?.data.kind === 'output' && newTarget?.type === 'swimlane';
+
+      // Reconnect the edge
+      const updatedEdge = { ...oldEdge, animated: true, style: undefined };
+      const newEdges = rfReconnectEdge(updatedEdge, newConnection, s.edges as typeof updatedEdge[]);
+
+      // Update Output node data
+      let nodes = s.nodes;
+      if (oldSource) {
+        if (wasHandoff && !isHandoff) {
+          // Moved from swimlane to non-swimlane — revert
+          nodes = nodes.map((n) =>
+            n.id === oldSource.id
+              ? { ...n, data: { ...n.data, destination: 'telegram' as const, targetFolder: undefined } }
+              : n,
+          );
+        } else if (isHandoff && newTarget) {
+          // Moved to a different swimlane — update targetFolder
+          const targetFolder = (newTarget.data as import('./types').SwimlaneNodeData).groupFolder;
+          nodes = nodes.map((n) =>
+            n.id === oldSource.id
+              ? { ...n, data: { ...n.data, destination: 'agent_handoff' as const, targetFolder } }
+              : n,
+          );
+        }
+      }
+
+      return {
+        edges: newEdges,
+        nodes,
+        saveStatus: s.currentGroupFolder ? 'unsaved' : s.saveStatus,
+      };
+    }),
 
   addNode: (kind, position = { x: 200 + Math.random() * 200, y: 150 + Math.random() * 200 }) => {
     const id = nextId();
@@ -585,14 +670,15 @@ export const useStore = create<BlueprintStore>((set, get) => ({
 
   openGroup: async (folder: string) => {
     lsSet(LS_LAST_GROUP, folder);
-    set({ currentGroupFolder: folder, projectName: folder, saveStatus: 'idle', selectedNodeId: null, past: [], future: [], canUndo: false, canRedo: false });
+    // Clear nodes/edges immediately so stale data can't be auto-drafted for the new folder
+    set({ currentGroupFolder: folder, projectName: folder, saveStatus: 'idle', nodes: [], edges: [], selectedNodeId: null, past: [], future: [], canUndo: false, canRedo: false });
 
     try {
       const res = await fetch(`/api/groups/${folder}/blueprint`);
       if (res.status === 404) {
-        // Check for a local draft even if there's no saved blueprint yet
+        // Check for a local draft — only use it if it actually has nodes
         const draft = loadDraft(folder);
-        if (draft) {
+        if (draft && draft.nodes.length > 0) {
           set({ nodes: draft.nodes, edges: draft.edges, saveStatus: 'unsaved' });
         } else {
           set({ nodes: [], edges: [], saveStatus: 'idle' });
@@ -610,11 +696,12 @@ export const useStore = create<BlueprintStore>((set, get) => ({
       }, 0);
       nodeCounter = maxId;
 
-      // Prefer a local draft if it exists (user had unsaved changes)
+      // Prefer a local draft only if it actually has content (guards against empty draft corruption)
       const draft = loadDraft(folder);
-      if (draft) {
+      if (draft && draft.nodes.length > 0) {
         set({ nodes: draft.nodes, edges: draft.edges, saveStatus: 'unsaved' });
       } else {
+        if (draft) clearDraft(folder); // discard empty/corrupted draft
         set({ nodes: project.nodes ?? [], edges: project.edges ?? [], saveStatus: 'saved' });
       }
     } catch (err) {

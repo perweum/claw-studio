@@ -32,6 +32,10 @@ Claw Studio lets you design, configure, and deploy personal AI bots using a drag
 - **Guided option prompts** — the assistant presents clickable choices when it needs your input, so you never have to guess what to type
 - **11 node types** — Trigger, Agent, Tool (Bash + MCP), Memory, Transform, Condition, Router, Output, File, Comment, Bot Container
 - **Bot swarms (swimlanes)** — add a **Bot Container** to your canvas to define sub-bots; deploy writes a separate `CLAUDE.md` and registers each container as its own bot, all from one blueprint
+- **Auto-wired handoffs** — draw an edge from an Output node to a Bot Container and the Output automatically switches to "Pass to another bot" with the correct target set; deleting the edge reverts it
+- **Swarm hierarchy in bot picker** — bots that contain sub-bots show a ▸ expand toggle in the picker; sub-bots are indented beneath their parent
+- **Reconnectable edges** — hover any edge to reveal its endpoints; drag an endpoint to move the connection, or drop it on the canvas to delete it
+- **Connection rules** — Bot Containers only accept connections from Output nodes; other connection types are blocked at the canvas level
 - **Pass to another bot** — Output node supports "Pass to another bot" as a destination, generating handoff instructions so the primary bot automatically triggers a sub-bot when it finishes
 - **Bot settings** — configure file mounts per bot from the `···` menu in the bot picker, giving bots read or read/write access to folders on your machine
 - **Fail-fast guardrails** — every deployed bot gets built-in guardrails in its `CLAUDE.md`: send an early acknowledgement, fail fast instead of looping, cap retries
@@ -182,7 +186,9 @@ Use **Bot Container** nodes to build pipelines where multiple independent bots c
 4. Nodes **outside** all containers belong to the primary bot (your current blueprint)
 5. Click **⬆ Deploy** — Claw Studio writes a `CLAUDE.md` for each container and registers each as its own bot in nanoclaw
 
-To **pass results from one bot to another**, set an Output node's destination to **"Pass to another bot"** — this adds handoff instructions to the primary bot's `CLAUDE.md` so it automatically triggers the target bot when it finishes.
+To **pass results from one bot to another**, draw an edge from an Output node (bottom handle) to a Bot Container. The Output automatically switches to "Pass to another bot" mode with the correct target set — no manual configuration needed. Deleting the edge reverts the Output back to its previous destination.
+
+The **bot picker** reflects the swarm hierarchy: parent bots that contain sub-bots show a ▸ toggle. Click it to expand and see the sub-bots listed beneath their parent.
 
 > **Important:** Only the main channel bot can hand off to other bots. Sub-bots (in containers) can pass back to the coordinator but not to arbitrary third bots. This is a nanoclaw constraint, explained in the Output node's settings panel.
 
@@ -397,6 +403,7 @@ claw-studio/
 │       ├── RouterNode.tsx
 │       ├── OutputNode.tsx
 │       ├── FileNode.tsx
+│       ├── SwimlaneNode.tsx
 │       └── CommentNode.tsx
 ```
 
@@ -418,6 +425,8 @@ claw-studio/
 | `POST /api/groups/:folder/run` | Trigger scheduled tasks immediately (Run now) |
 | `GET /api/groups/:folder/runs` | Get recent run history and last run status |
 | `GET /api/status` | Live status for all bots — next run, last run, warnings |
+| `GET /api/groups/:folder/settings` | Get bot settings (additional file mounts) |
+| `PUT /api/groups/:folder/settings` | Update bot settings (merges with existing container config) |
 | `POST /api/groups/:folder/register` | Register a group with a channel JID |
 | `POST /api/chat` | Run the AI assistant (agentic loop with tools) |
 | `GET /api/templates` | List starter blueprint templates |

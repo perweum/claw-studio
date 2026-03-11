@@ -2488,3 +2488,60 @@ body {
   font-weight: 600;
   letter-spacing: 0.04em;
 }
+
+/* GroupPicker — collapsible swarm tree */
+.group-picker__swarm-parent { width: 100%; }
+.group-picker__parent-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.group-picker__expand-btn {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin-right: 2px;
+  border-radius: 3px;
+}
+.group-picker__expand-btn:hover { background: var(--surface-2); color: var(--text); }
+.group-picker__expand-spacer { flex-shrink: 0; width: 22px; }
+.group-picker__children {
+  padding-left: 22px;
+  border-left: 1px solid var(--border);
+  margin-left: 10px;
+}
+.group-picker__child-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  position: relative;
+}
+.group-picker__child-row::before {
+  content: '';
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  width: 12px;
+  height: 1px;
+  background: var(--border);
+}
+.group-picker__child-badge {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-swimlane);
+  opacity: 0.75;
+  margin-left: 2px;
+}

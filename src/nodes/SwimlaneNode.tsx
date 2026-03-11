@@ -1,4 +1,5 @@
 import { Handle, NodeResizer, Position, type NodeProps } from '@xyflow/react';
+// Note: SwimlaneNode only has a target handle — Output nodes are always the edge source
 import type { SwimlaneNodeData } from '../types';
 
 function hashHue(str: string): number {
@@ -40,13 +41,6 @@ export function SwimlaneNode({ data, selected }: NodeProps) {
           <span className="swimlane-node__badge">BOT</span>
           <span className="swimlane-node__label">{d.label || 'Bot Container'}</span>
         </div>
-        <Handle
-          type="source"
-          position={Position.Right}
-          id="out"
-          className="swimlane-node__handle"
-          style={{ top: 24 }}
-        />
       </div>
     </>
   );

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useStore, type GroupInfo } from '../store';
 import type { AdditionalMount } from '../types';
 
@@ -149,6 +149,81 @@ const ADDABLE_CHANNELS: Array<{ platform: string; label: string; color: string; 
   { platform: 'discord',  label: 'Discord',  color: '#5865f2', skillMsg: 'I want to add a Discord channel to nanoclaw' },
 ];
 
+// ── BotRow ────────────────────────────────────────────────────────────────────
+
+interface BotRowProps {
+  g: GroupInfo;
+  isActive: boolean;
+  isMenuOpen: boolean;
+  menuRef: React.RefObject<HTMLDivElement>;
+  hasChildren: boolean;
+  isExpanded: boolean;
+  isChild?: boolean;
+  onExpand?: () => void;
+  onPick: (folder: string) => void;
+  onMenuToggle: (folder: string) => void;
+  onSettings: (folder: string) => void;
+}
+
+function BotRow({ g, isActive, isMenuOpen, menuRef, hasChildren, isExpanded, isChild, onExpand, onPick, onMenuToggle, onSettings }: BotRowProps) {
+  const channel = detectChannel(g.folder);
+  return (
+    <div className="group-picker__item-wrap group-picker__parent-row">
+      {hasChildren ? (
+        <button className="group-picker__expand-btn" onClick={onExpand} title={isExpanded ? 'Collapse' : 'Expand swarm'}>
+          {isExpanded ? '▾' : '▸'}
+        </button>
+      ) : (
+        <span className="group-picker__expand-spacer" />
+      )}
+      <button
+        className={`palette__item group-picker__item ${isActive ? 'group-picker__item--active' : ''}`}
+        style={{ flex: 1, minWidth: 0 }}
+        onClick={() => onPick(g.folder)}
+      >
+        <div className="group-picker__item-main">
+          <span className="group-picker__bot-name">{formatBotName(g.folder)}</span>
+          <div className="group-picker__item-meta">
+            {channel && (
+              <span className="group-picker__channel-badge" style={{ background: channel.color + '22', color: channel.color, border: `1px solid ${channel.color}44` }}>
+                {channel.label}
+              </span>
+            )}
+            {isChild && <span className="group-picker__child-badge">sub-bot</span>}
+            {!g.hasClaude && (
+              <span className="group-picker__status-badge group-picker__status-badge--warn">no CLAUDE.md</span>
+            )}
+            {g.hasBlueprint && (
+              <span className="group-picker__status-badge">blueprint</span>
+            )}
+          </div>
+        </div>
+        {isActive && <span className="group-picker__current-badge">currently open</span>}
+      </button>
+
+      {/* ⋯ menu */}
+      <div className="group-picker__item-menu" ref={isMenuOpen ? menuRef : undefined}>
+        <button
+          className="group-picker__menu-btn"
+          title="Bot options"
+          onClick={e => { e.stopPropagation(); onMenuToggle(g.folder); }}
+        >
+          ···
+        </button>
+        {isMenuOpen && (
+          <div className="group-picker__menu-dropdown">
+            <button className="group-picker__menu-item" onClick={e => { e.stopPropagation(); onSettings(g.folder); }}>
+              Bot settings
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── GroupPicker ───────────────────────────────────────────────────────────────
+
 interface GroupPickerProps {
   onClose: () => void;
   initialMode?: 'list' | 'new';
@@ -159,6 +234,7 @@ export function GroupPicker({ onClose, initialMode = 'list', onNewChannel }: Gro
   const { currentGroupFolder, openGroup, closeGroup, createBot } = useStore();
   const [mode, setMode] = useState<'list' | 'new'>(initialMode);
   const [groups, setGroups] = useState<GroupInfo[]>([]);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -270,55 +346,61 @@ export function GroupPicker({ onClose, initialMode = 'list', onNewChannel }: Gro
             {!loading && !error && groups.length === 0 && (
               <div className="palette__empty">No bots yet — create your first one above.</div>
             )}
-            {groups.map((g) => {
-              const channel = detectChannel(g.folder);
-              const isActive = g.folder === currentGroupFolder;
-              const isMenuOpen = menuFolder === g.folder;
-              return (
-                <div key={g.folder} className="group-picker__item-wrap">
-                  <button
-                    className={`palette__item group-picker__item ${isActive ? 'group-picker__item--active' : ''}`}
-                    onClick={() => pick(g.folder)}
-                  >
-                    <div className="group-picker__item-main">
-                      <span className="group-picker__bot-name">{formatBotName(g.folder)}</span>
-                      <div className="group-picker__item-meta">
-                        {channel && (
-                          <span className="group-picker__channel-badge" style={{ background: channel.color + '22', color: channel.color, border: `1px solid ${channel.color}44` }}>
-                            {channel.label}
-                          </span>
-                        )}
-                        {!g.hasClaude && (
-                          <span className="group-picker__status-badge group-picker__status-badge--warn">no CLAUDE.md</span>
-                        )}
-                        {g.hasBlueprint && (
-                          <span className="group-picker__status-badge">blueprint</span>
-                        )}
-                      </div>
-                    </div>
-                    {isActive && <span className="group-picker__current-badge">currently open</span>}
-                  </button>
+            {!loading && !error && (() => {
+              // Determine which folders appear as children of some other bot
+              const allChildren = new Set(groups.flatMap((g) => g.swarmChildren ?? []));
+              // Top-level = not a child of anyone
+              const topLevel = groups.filter((g) => !allChildren.has(g.folder));
 
-                  {/* ⋯ menu */}
-                  <div className="group-picker__item-menu" ref={isMenuOpen ? menuRef : undefined}>
-                    <button
-                      className="group-picker__menu-btn"
-                      title="Bot options"
-                      onClick={e => { e.stopPropagation(); setMenuFolder(isMenuOpen ? null : g.folder); }}
-                    >
-                      ···
-                    </button>
-                    {isMenuOpen && (
-                      <div className="group-picker__menu-dropdown">
-                        <button className="group-picker__menu-item" onClick={e => { e.stopPropagation(); setMenuFolder(null); setSettingsFolder(g.folder); }}>
-                          Bot settings
-                        </button>
+              return topLevel.map((g) => {
+                const children = (g.swarmChildren ?? [])
+                  .map((cf) => groups.find((x) => x.folder === cf))
+                  .filter(Boolean) as GroupInfo[];
+                const hasChildren = children.length > 0;
+                const isExpanded = expanded.has(g.folder);
+
+                return (
+                  <div key={g.folder} className="group-picker__swarm-parent">
+                    <BotRow
+                      g={g}
+                      isActive={g.folder === currentGroupFolder}
+                      isMenuOpen={menuFolder === g.folder}
+                      menuRef={menuRef}
+                      hasChildren={hasChildren}
+                      isExpanded={isExpanded}
+                      onExpand={() => setExpanded((s) => {
+                        const next = new Set(s);
+                        next.has(g.folder) ? next.delete(g.folder) : next.add(g.folder);
+                        return next;
+                      })}
+                      onPick={pick}
+                      onMenuToggle={(folder) => setMenuFolder((f) => f === folder ? null : folder)}
+                      onSettings={(folder) => { setMenuFolder(null); setSettingsFolder(folder); }}
+                    />
+                    {hasChildren && isExpanded && (
+                      <div className="group-picker__children">
+                        {children.map((child) => (
+                          <div key={child.folder} className="group-picker__child-row">
+                            <BotRow
+                              g={child}
+                              isActive={child.folder === currentGroupFolder}
+                              isMenuOpen={menuFolder === child.folder}
+                              menuRef={menuRef}
+                              hasChildren={false}
+                              isExpanded={false}
+                              isChild
+                              onPick={pick}
+                              onMenuToggle={(folder) => setMenuFolder((f) => f === folder ? null : folder)}
+                              onSettings={(folder) => { setMenuFolder(null); setSettingsFolder(folder); }}
+                            />
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
 
             {settingsFolder && (
               <BotSettingsModal folder={settingsFolder} onClose={() => setSettingsFolder(null)} />

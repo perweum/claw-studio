@@ -866,11 +866,26 @@ async function handleGroups(req: IncomingMessage, res: ServerResponse): Promise<
       const entries = fs.readdirSync(GROUPS_DIR, { withFileTypes: true });
       const groups = entries
         .filter((e) => e.isDirectory() && isValidFolder(e.name))
-        .map((e) => ({
-          folder: e.name,
-          hasBlueprint: fs.existsSync(path.join(GROUPS_DIR, e.name, 'blueprint.json')),
-          hasClaude: fs.existsSync(path.join(GROUPS_DIR, e.name, 'CLAUDE.md')),
-        }));
+        .map((e) => {
+          const blueprintPath = path.join(GROUPS_DIR, e.name, 'blueprint.json');
+          const hasBlueprint = fs.existsSync(blueprintPath);
+          let swarmChildren: string[] = [];
+          if (hasBlueprint) {
+            try {
+              const bp = JSON.parse(fs.readFileSync(blueprintPath, 'utf-8'));
+              swarmChildren = ((bp.nodes ?? []) as Array<{ type: string; data: { groupFolder?: string } }>)
+                .filter(n => n.type === 'swimlane')
+                .map(n => n.data.groupFolder ?? '')
+                .filter(Boolean);
+            } catch { /* ignore */ }
+          }
+          return {
+            folder: e.name,
+            hasBlueprint,
+            hasClaude: fs.existsSync(path.join(GROUPS_DIR, e.name, 'CLAUDE.md')),
+            swarmChildren,
+          };
+        });
       res.writeHead(200);
       res.end(JSON.stringify({ groups }));
     } catch (err) {
@@ -1420,10 +1435,21 @@ async function handleGroups(req: IncomingMessage, res: ServerResponse): Promise<
           if (fs.existsSync(DB_PATH)) {
             const DbCtor = _require(path.join(nanoclawPath, 'node_modules', 'better-sqlite3'));
             const db = new DbCtor(DB_PATH);
-            const existing = db.prepare('SELECT folder FROM registered_groups WHERE folder = ?').get(slFolder);
+
+            // Read parent's outputJid to inherit for sub-bots that lack one
+            let parentOutputJid: string | null = null;
+            try {
+              const parentRg = db.prepare('SELECT container_config FROM registered_groups WHERE folder = ?').get(folder) as { container_config: string | null } | undefined;
+              if (parentRg?.container_config) {
+                parentOutputJid = (JSON.parse(parentRg.container_config) as { outputJid?: string }).outputJid ?? null;
+              }
+            } catch { /* non-fatal */ }
+
+            const existing = db.prepare('SELECT folder, container_config FROM registered_groups WHERE folder = ?').get(slFolder) as { folder: string; container_config: string | null } | undefined;
             if (!existing) {
-              db.prepare('INSERT OR IGNORE INTO registered_groups (jid, folder, name, added_at) VALUES (?, ?, ?, ?)')
-                .run(`scheduled:${slFolder}`, slFolder, slLabel, new Date().toISOString());
+              const slConfig = parentOutputJid ? JSON.stringify({ outputJid: parentOutputJid }) : null;
+              db.prepare('INSERT OR IGNORE INTO registered_groups (jid, folder, name, added_at, container_config) VALUES (?, ?, ?, ?, ?)')
+                .run(`scheduled:${slFolder}`, slFolder, slLabel, new Date().toISOString(), slConfig);
               done.push(`[${slLabel}] Registered as new bot (scheduled:${slFolder})`);
             }
             // Register schedule triggers for this swimlane bot
@@ -1739,7 +1765,9 @@ function partitionBySwimlaneMembership(nodes: DeployNode[]): Map<string | null, 
   }
   for (const node of nodes) {
     if (node.type === 'swimlane') continue;
-    let assigned = false;
+    // Assign to the smallest containing swimlane (handles overlapping containers correctly)
+    let bestFolder: string | null = null;
+    let bestArea = Infinity;
     for (const sl of swimlanes) {
       const slFolder = String(sl.data.groupFolder || 'bot');
       const slX = sl.position.x;
@@ -1748,12 +1776,15 @@ function partitionBySwimlaneMembership(nodes: DeployNode[]): Map<string | null, 
       const slH = Number(sl.style?.height ?? sl.data.height ?? 420);
       if (node.position.x >= slX && node.position.x <= slX + slW &&
           node.position.y >= slY && node.position.y <= slY + slH) {
-        result.get(slFolder)!.push(node);
-        assigned = true;
-        break;
+        const area = slW * slH;
+        if (area < bestArea) { bestArea = area; bestFolder = slFolder; }
       }
     }
-    if (!assigned) result.get(null)!.push(node);
+    if (bestFolder !== null) {
+      result.get(bestFolder)!.push(node);
+    } else {
+      result.get(null)!.push(node);
+    }
   }
   return result;
 }

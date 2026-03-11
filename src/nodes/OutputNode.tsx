@@ -37,6 +37,7 @@ export function OutputNode({ data, selected }: NodeProps) {
         <span className="bp-node__warning" title={`${emptyHint}`}>!</span>
       )}
       <Handle type="target" position={Position.Top} />
+      <Handle type="source" position={Position.Bottom} id="out" />
       <div className="bp-node__header">
         <span className="bp-node__badge">OUTPUT</span>
         <span className="bp-node__model">{DEST_ICONS[d.destination]} {DEST_LABELS[d.destination] ?? d.destination}</span>

@@ -5,9 +5,11 @@ import {
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
+  type Connection,
+  type Edge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
 import { ChatPanel } from './components/ChatPanel';
 import { CommandPalette } from './components/CommandPalette';
@@ -28,7 +30,36 @@ interface CtxMenu {
 }
 
 function Canvas({ onContextMenu }: { onContextMenu: (ctx: CtxMenu) => void }) {
-  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, selectNode } = useStore();
+  const { nodes, edges, onNodesChange, onEdgesChange, onConnect, onReconnect, selectNode } = useStore();
+  const edgeReconnectSuccessful = useRef(false);
+
+  // Only Output nodes may connect to Swimlane containers; Swimlanes cannot be a source
+  const isValidConnection = useCallback((connection: Connection | Edge) => {
+    const { nodes: ns } = useStore.getState();
+    const src = ns.find((n) => n.id === connection.source);
+    const tgt = ns.find((n) => n.id === connection.target);
+    if (tgt?.type === 'swimlane') return src?.data.kind === 'output';
+    if (src?.type === 'swimlane') return false;
+    return true;
+  }, []);
+
+  const handleReconnectStart = useCallback(() => {
+    edgeReconnectSuccessful.current = false;
+  }, []);
+
+  const handleReconnect = useCallback((oldEdge: Edge, newConnection: Connection) => {
+    edgeReconnectSuccessful.current = true;
+    onReconnect(oldEdge, newConnection);
+  }, [onReconnect]);
+
+  // If drag ended without a valid target, delete the edge
+  const handleReconnectEnd = useCallback((_: MouseEvent | TouchEvent, edge: Edge) => {
+    if (!edgeReconnectSuccessful.current) {
+      const { onEdgesChange: applyChanges } = useStore.getState();
+      applyChanges([{ type: 'remove', id: edge.id }]);
+    }
+    edgeReconnectSuccessful.current = true;
+  }, []);
 
   return (
     <ReactFlow
@@ -38,6 +69,10 @@ function Canvas({ onContextMenu }: { onContextMenu: (ctx: CtxMenu) => void }) {
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
+      onReconnect={handleReconnect}
+      onReconnectStart={handleReconnectStart}
+      onReconnectEnd={handleReconnectEnd}
+      isValidConnection={isValidConnection}
       onNodeClick={(_, node) => selectNode(node.id)}
       onPaneClick={() => selectNode(null)}
       onNodeContextMenu={(e, node) => {

@@ -159,14 +159,26 @@ interface BotRowProps {
   hasChildren: boolean;
   isExpanded: boolean;
   isChild?: boolean;
+  isRenaming: boolean;
+  renameValue: string;
   onExpand?: () => void;
   onPick: (folder: string) => void;
   onMenuToggle: (folder: string) => void;
   onSettings: (folder: string) => void;
+  onRenameStart: (folder: string, currentName: string) => void;
+  onRenameChange: (val: string) => void;
+  onRenameCommit: () => void;
+  onRenameCancel: () => void;
 }
 
-function BotRow({ g, isActive, isMenuOpen, menuRef, hasChildren, isExpanded, isChild, onExpand, onPick, onMenuToggle, onSettings }: BotRowProps) {
+function BotRow({ g, isActive, isMenuOpen, menuRef, hasChildren, isExpanded, isChild, isRenaming, renameValue, onExpand, onPick, onMenuToggle, onSettings, onRenameStart, onRenameChange, onRenameCommit, onRenameCancel }: BotRowProps) {
   const channel = detectChannel(g.folder);
+  const renameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isRenaming) setTimeout(() => renameRef.current?.select(), 30);
+  }, [isRenaming]);
+
   return (
     <div className="group-picker__item-wrap group-picker__parent-row">
       {hasChildren ? (
@@ -176,48 +188,65 @@ function BotRow({ g, isActive, isMenuOpen, menuRef, hasChildren, isExpanded, isC
       ) : (
         <span className="group-picker__expand-spacer" />
       )}
-      <button
-        className={`palette__item group-picker__item ${isActive ? 'group-picker__item--active' : ''}`}
-        style={{ flex: 1, minWidth: 0 }}
-        onClick={() => onPick(g.folder)}
-      >
-        <div className="group-picker__item-main">
-          <span className="group-picker__bot-name">{formatBotName(g.folder)}</span>
-          <div className="group-picker__item-meta">
-            {channel && (
-              <span className="group-picker__channel-badge" style={{ background: channel.color + '22', color: channel.color, border: `1px solid ${channel.color}44` }}>
-                {channel.label}
-              </span>
-            )}
-            {isChild && <span className="group-picker__child-badge">sub-bot</span>}
-            {!g.hasClaude && (
-              <span className="group-picker__status-badge group-picker__status-badge--warn">no CLAUDE.md</span>
-            )}
-            {g.hasBlueprint && (
-              <span className="group-picker__status-badge">blueprint</span>
-            )}
-          </div>
+
+      {isRenaming ? (
+        <div className="group-picker__rename-wrap">
+          <input
+            ref={renameRef}
+            className="group-picker__rename-input"
+            value={renameValue}
+            onChange={e => onRenameChange(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') onRenameCommit(); if (e.key === 'Escape') onRenameCancel(); }}
+            onBlur={onRenameCommit}
+            spellCheck={false}
+          />
         </div>
-        {isActive && <span className="group-picker__current-badge">currently open</span>}
-      </button>
+      ) : (
+        <button
+          className={`palette__item group-picker__item ${isActive ? 'group-picker__item--active' : ''}`}
+          style={{ flex: 1, minWidth: 0 }}
+          onClick={() => onPick(g.folder)}
+        >
+          <div className="group-picker__item-main">
+            <span className="group-picker__bot-name">{g.displayName}</span>
+            <div className="group-picker__item-meta">
+              {channel && (
+                <span className="group-picker__channel-badge" style={{ background: channel.color + '22', color: channel.color, border: `1px solid ${channel.color}44` }}>
+                  {channel.label}
+                </span>
+              )}
+              {isChild && <span className="group-picker__child-badge">sub-bot</span>}
+              {!g.hasClaude && (
+                <span className="group-picker__status-badge group-picker__status-badge--warn">no CLAUDE.md</span>
+              )}
+            </div>
+          </div>
+          {isActive && <span className="group-picker__current-badge">open</span>}
+        </button>
+      )}
 
       {/* ⋯ menu */}
-      <div className="group-picker__item-menu" ref={isMenuOpen ? menuRef : undefined}>
-        <button
-          className="group-picker__menu-btn"
-          title="Bot options"
-          onClick={e => { e.stopPropagation(); onMenuToggle(g.folder); }}
-        >
-          ···
-        </button>
-        {isMenuOpen && (
-          <div className="group-picker__menu-dropdown">
-            <button className="group-picker__menu-item" onClick={e => { e.stopPropagation(); onSettings(g.folder); }}>
-              Bot settings
-            </button>
-          </div>
-        )}
-      </div>
+      {!isRenaming && (
+        <div className="group-picker__item-menu" ref={isMenuOpen ? menuRef : undefined}>
+          <button
+            className="group-picker__menu-btn"
+            title="Bot options"
+            onClick={e => { e.stopPropagation(); onMenuToggle(g.folder); }}
+          >
+            ···
+          </button>
+          {isMenuOpen && (
+            <div className="group-picker__menu-dropdown">
+              <button className="group-picker__menu-item" onClick={e => { e.stopPropagation(); onRenameStart(g.folder, g.displayName); }}>
+                Rename
+              </button>
+              <button className="group-picker__menu-item" onClick={e => { e.stopPropagation(); onSettings(g.folder); }}>
+                Bot settings
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -247,10 +276,12 @@ export function GroupPicker({ onClose, initialMode = 'list', onNewChannel }: Gro
   const [pendingChannel, setPendingChannel] = useState<{ label: string; skillMsg: string } | null>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
 
-  // ⋯ menu and settings modal state
+  // ⋯ menu, settings modal, and rename state
   const [menuFolder, setMenuFolder] = useState<string | null>(null);
   const [settingsFolder, setSettingsFolder] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const [renamingFolder, setRenamingFolder] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   // Close menu on outside click
   useEffect(() => {
@@ -267,7 +298,13 @@ export function GroupPicker({ onClose, initialMode = 'list', onNewChannel }: Gro
   useEffect(() => {
     fetch('/api/groups')
       .then((r) => r.json())
-      .then((d) => setGroups(d.groups ?? []))
+      .then((d) => {
+        const gs: GroupInfo[] = d.groups ?? [];
+        setGroups(gs);
+        // Default-expand all swarm parents
+        const parents = gs.filter(g => (g.swarmChildren ?? []).length > 0).map(g => g.folder);
+        setExpanded(new Set(parents));
+      })
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false));
   }, []);
@@ -282,6 +319,29 @@ export function GroupPicker({ onClose, initialMode = 'list', onNewChannel }: Gro
   useEffect(() => {
     if (mode === 'new') setTimeout(() => nameInputRef.current?.focus(), 50);
   }, [mode]);
+
+  function startRename(folder: string, currentName: string) {
+    setMenuFolder(null);
+    setRenamingFolder(folder);
+    setRenameValue(currentName);
+  }
+
+  async function commitRename() {
+    const name = renameValue.trim();
+    setRenamingFolder(null);
+    if (!name || !renamingFolder) return;
+    await fetch(`/api/groups/${renamingFolder}/name`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }).catch(() => {});
+    setGroups(gs => gs.map(g => g.folder === renamingFolder ? { ...g, displayName: name } : g));
+  }
+
+  function cancelRename() {
+    setRenamingFolder(null);
+    setRenameValue('');
+  }
 
   function pick(folder: string) {
     if (folder === currentGroupFolder) { onClose(); return; }
@@ -359,39 +419,48 @@ export function GroupPicker({ onClose, initialMode = 'list', onNewChannel }: Gro
                 const hasChildren = children.length > 0;
                 const isExpanded = expanded.has(g.folder);
 
+                const sharedRowProps = {
+                  menuRef,
+                  onPick: pick,
+                  onMenuToggle: (folder: string) => setMenuFolder((f) => f === folder ? null : folder),
+                  onSettings: (folder: string) => { setMenuFolder(null); setSettingsFolder(folder); },
+                  onRenameStart: startRename,
+                  onRenameChange: setRenameValue,
+                  onRenameCommit: commitRename,
+                  onRenameCancel: cancelRename,
+                };
+
                 return (
                   <div key={g.folder} className="group-picker__swarm-parent">
                     <BotRow
+                      {...sharedRowProps}
                       g={g}
                       isActive={g.folder === currentGroupFolder}
                       isMenuOpen={menuFolder === g.folder}
-                      menuRef={menuRef}
                       hasChildren={hasChildren}
                       isExpanded={isExpanded}
+                      isRenaming={renamingFolder === g.folder}
+                      renameValue={renameValue}
                       onExpand={() => setExpanded((s) => {
                         const next = new Set(s);
                         next.has(g.folder) ? next.delete(g.folder) : next.add(g.folder);
                         return next;
                       })}
-                      onPick={pick}
-                      onMenuToggle={(folder) => setMenuFolder((f) => f === folder ? null : folder)}
-                      onSettings={(folder) => { setMenuFolder(null); setSettingsFolder(folder); }}
                     />
                     {hasChildren && isExpanded && (
                       <div className="group-picker__children">
                         {children.map((child) => (
                           <div key={child.folder} className="group-picker__child-row">
                             <BotRow
+                              {...sharedRowProps}
                               g={child}
                               isActive={child.folder === currentGroupFolder}
                               isMenuOpen={menuFolder === child.folder}
-                              menuRef={menuRef}
                               hasChildren={false}
                               isExpanded={false}
                               isChild
-                              onPick={pick}
-                              onMenuToggle={(folder) => setMenuFolder((f) => f === folder ? null : folder)}
-                              onSettings={(folder) => { setMenuFolder(null); setSettingsFolder(folder); }}
+                              isRenaming={renamingFolder === child.folder}
+                              renameValue={renameValue}
                             />
                           </div>
                         ))}

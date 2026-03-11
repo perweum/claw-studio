@@ -128,6 +128,7 @@ export type AssistantModel = 'auto' | 'claude-sonnet-4-6' | 'claude-haiku-4-5-20
 
 export interface GroupInfo {
   folder: string;
+  displayName: string;
   hasBlueprint: boolean;
   hasClaude: boolean;
   swarmChildren?: string[];

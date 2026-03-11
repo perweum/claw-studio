@@ -879,11 +879,16 @@ async function handleGroups(req: IncomingMessage, res: ServerResponse): Promise<
                 .filter(Boolean);
             } catch { /* ignore */ }
           }
+          const namePath = path.join(GROUPS_DIR, e.name, 'name.txt');
+          const displayName = fs.existsSync(namePath)
+            ? fs.readFileSync(namePath, 'utf-8').trim()
+            : e.name.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
           return {
             folder: e.name,
             hasBlueprint,
             hasClaude: fs.existsSync(path.join(GROUPS_DIR, e.name, 'CLAUDE.md')),
             swarmChildren,
+            displayName,
           };
         });
       res.writeHead(200);
@@ -1170,6 +1175,23 @@ async function handleGroups(req: IncomingMessage, res: ServerResponse): Promise<
         res.end(JSON.stringify({ ok: true }));
         return;
       }
+    } catch (err) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: String(err) }));
+    }
+    return;
+  }
+
+  // ── /api/groups/:folder/name ──────────────────────────────────────────────
+  if (resource === 'name' && req.method === 'PUT') {
+    try {
+      const body = JSON.parse(await readBody(req));
+      const name = typeof body.name === 'string' ? body.name.trim() : '';
+      if (!name) { res.writeHead(400); res.end(JSON.stringify({ error: 'name is required' })); return; }
+      if (!fs.existsSync(groupDir)) fs.mkdirSync(groupDir, { recursive: true });
+      fs.writeFileSync(path.join(groupDir, 'name.txt'), name, 'utf-8');
+      res.writeHead(200);
+      res.end(JSON.stringify({ ok: true, name }));
     } catch (err) {
       res.writeHead(500);
       res.end(JSON.stringify({ error: String(err) }));

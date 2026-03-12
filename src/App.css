@@ -2558,3 +2558,218 @@ body {
   outline: none;
   box-sizing: border-box;
 }
+
+/* ── Welcome Modal ───────────────────────────────────────────────────────────── */
+
+.welcome-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(4px);
+}
+
+.welcome-modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 48px 40px 40px;
+  max-width: 460px;
+  width: calc(100% - 32px);
+  text-align: center;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+.welcome-modal__logo {
+  font-size: 40px;
+  margin-bottom: 16px;
+  color: var(--accent-agent);
+  line-height: 1;
+}
+
+.welcome-modal__title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 12px;
+  letter-spacing: -0.3px;
+}
+
+.welcome-modal__body {
+  font-size: 14px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0 0 32px;
+}
+
+.welcome-modal__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.welcome-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 11px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.welcome-btn--primary {
+  background: var(--accent-agent);
+  color: #fff;
+}
+
+.welcome-btn--primary:hover {
+  opacity: 0.88;
+}
+
+.welcome-btn--secondary {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.welcome-btn--secondary:hover {
+  color: var(--text);
+  border-color: #555;
+}
+
+/* ── Onboarding Tour ─────────────────────────────────────────────────────────── */
+
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.tour-spotlight {
+  position: fixed;
+  z-index: 1501;
+  border-radius: 8px;
+  /* The box-shadow punches a hole in the overlay by covering everything else */
+  box-shadow:
+    0 0 0 9999px rgba(0, 0, 0, 0.55),
+    0 0 0 2px var(--accent-agent);
+  pointer-events: none;
+  transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease;
+}
+
+.tour-tooltip {
+  position: fixed;
+  z-index: 1502;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  transition: top 0.25s ease, left 0.25s ease, opacity 0.15s ease;
+}
+
+.tour-tooltip__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.tour-tooltip__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.tour-tooltip__close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.tour-tooltip__close:hover {
+  color: var(--text);
+  background: var(--surface-2);
+}
+
+.tour-tooltip__body {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.55;
+  margin: 0 0 14px;
+}
+
+.tour-tooltip__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tour-tooltip__progress {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tour-tooltip__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.tour-btn {
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.tour-btn--primary {
+  background: var(--accent-agent);
+  color: #fff;
+}
+
+.tour-btn--primary:hover {
+  opacity: 0.88;
+}
+
+.tour-btn--secondary {
+  background: var(--surface-2);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.tour-btn--secondary:hover {
+  color: var(--text);
+}
+
+.tour-tooltip__dots {
+  display: flex;
+  gap: 5px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.tour-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.2s;
+}
+
+.tour-dot--active {
+  background: var(--accent-agent);
+}

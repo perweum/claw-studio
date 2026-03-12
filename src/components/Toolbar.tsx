@@ -38,9 +38,10 @@ interface ToolbarProps {
   onOpenGroupPicker: () => void;
   onNewBot: () => void;
   onOpenStatus: () => void;
+  onStartTour: () => void;
 }
 
-export function Toolbar({ onOpenPalette, onOpenGroupPicker, onNewBot, onOpenStatus }: ToolbarProps) {
+export function Toolbar({ onOpenPalette, onOpenGroupPicker, onNewBot, onOpenStatus, onStartTour }: ToolbarProps) {
   const hasAgentNode = useStore(s => s.nodes.some(n => n.type === 'agent'));
   const currentGroupFolder = useStore(s => s.currentGroupFolder);
   const saveStatus = useStore(s => s.saveStatus);
@@ -184,6 +185,7 @@ export function Toolbar({ onOpenPalette, onOpenGroupPicker, onNewBot, onOpenStat
             className={`toolbar__group-btn ${currentGroupFolder ? 'toolbar__group-btn--active' : ''}`}
             onClick={onOpenGroupPicker}
             title="Switch bot"
+            data-tour="bot-picker"
           >
             {currentGroupFolder ? (
               <><span className="toolbar__group-dot" />{formatBotName(currentGroupFolder)}</>
@@ -207,11 +209,21 @@ export function Toolbar({ onOpenPalette, onOpenGroupPicker, onNewBot, onOpenStat
 
         <div className="toolbar__center">
           {PRIMARY_KINDS.map((kind) => (
-            <button key={kind} className={`toolbar__btn ${PRIMARY_STYLE[kind]}`} onClick={() => addNode(kind)}>
+            <button
+              key={kind}
+              className={`toolbar__btn ${PRIMARY_STYLE[kind]}`}
+              onClick={() => addNode(kind)}
+              data-tour={`add-${kind}`}
+            >
               + {NODE_KIND_META[kind].label}
             </button>
           ))}
-          <button className="toolbar__btn btn-swimlane" onClick={() => addNode('swimlane')} title="Add a bot container (swimlane)">
+          <button
+            className="toolbar__btn btn-swimlane"
+            onClick={() => addNode('swimlane')}
+            title="Add a bot container (swimlane)"
+            data-tour="add-bot"
+          >
             + Bot
           </button>
           <button className="toolbar__btn btn-secondary toolbar__btn--palette" onClick={onOpenPalette} title="Command palette (⌘K)">
@@ -251,6 +263,7 @@ export function Toolbar({ onOpenPalette, onOpenGroupPicker, onNewBot, onOpenStat
                 onClick={handleDeploy}
                 disabled={deployState === 'deploying' || !hasAgentNode}
                 title={hasAgentNode ? 'Generate CLAUDE.md from this blueprint and deploy to the group' : 'Add an Agent node to deploy'}
+                data-tour="deploy"
               >
                 {deployState === 'deploying' ? 'Deploying…' : '⬆ Deploy'}
               </button>
@@ -297,6 +310,10 @@ export function Toolbar({ onOpenPalette, onOpenGroupPicker, onNewBot, onOpenStat
                 <button className="toolbar__menu-item" onClick={handleBackup}>
                   <span className="toolbar__menu-icon">↓</span>
                   Back up all bots
+                </button>
+                <button className="toolbar__menu-item" onClick={() => { setMenuOpen(false); onStartTour(); }}>
+                  <span className="toolbar__menu-icon">◎</span>
+                  Restart tour
                 </button>
               </div>
             )}

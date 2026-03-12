@@ -16,9 +16,13 @@ import { CommandPalette } from './components/CommandPalette';
 import { ContextMenu } from './components/ContextMenu';
 import { GroupPicker } from './components/GroupPicker';
 import { NodePanel } from './components/NodePanel';
+import { OnboardingTour } from './components/OnboardingTour';
 import { SetupWizard } from './components/SetupWizard';
 import { StatusPanel } from './components/StatusPanel';
 import { Toolbar } from './components/Toolbar';
+import { WelcomeModal } from './components/WelcomeModal';
+
+const ONBOARDED_KEY = 'cs:onboarded';
 import { nodeTypes } from './nodes';
 import { useStore } from './store';
 import { NODE_KIND_META } from './types';
@@ -104,13 +108,41 @@ export default function App() {
   const [showWizard, setShowWizard] = useState(false);
   const [chatPrefill, setChatPrefill] = useState<string | null>(null);
   const [statusOpen, setStatusOpen] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
+  const [tourStep, setTourStep] = useState<number | null>(null);
+
+  function startTour() {
+    setShowWelcome(false);
+    setTourStep(0);
+  }
+
+  function dismissOnboarding() {
+    localStorage.setItem(ONBOARDED_KEY, '1');
+    setShowWelcome(false);
+    setTourStep(null);
+  }
+
+  function advanceTour() {
+    if (tourStep === null) return;
+    const total = 8; // must match STEPS.length in OnboardingTour
+    if (tourStep < total - 1) {
+      setTourStep(tourStep + 1);
+    } else {
+      dismissOnboarding();
+    }
+  }
+
+  function retreatTour() {
+    if (tourStep !== null && tourStep > 0) setTourStep(tourStep - 1);
+  }
 
   const { openGroup, saveDraftNow, saveStatus, undo, redo, canUndo, canRedo } = useStore();
 
-  // Restore last open group on mount
+  // Restore last open group on mount; show welcome if first visit
   useEffect(() => {
     const lastGroup = localStorage.getItem('cs:lastGroup');
     if (lastGroup) openGroup(lastGroup);
+    if (!localStorage.getItem(ONBOARDED_KEY)) setShowWelcome(true);
   }, [openGroup]);
 
   // Auto-save draft when there are unsaved changes (debounced)
@@ -181,10 +213,13 @@ export default function App() {
           onOpenGroupPicker={() => { setGroupPickerMode('list'); setGroupPickerOpen(true); }}
           onNewBot={() => { setGroupPickerMode('new'); setGroupPickerOpen(true); }}
           onOpenStatus={() => setStatusOpen(true)}
+          onStartTour={startTour}
         />
         <div className="app__body">
-          <ChatPanel prefill={chatPrefill} onPrefillUsed={() => setChatPrefill(null)} />
-          <div className="app__canvas">
+          <div data-tour="chat-panel">
+            <ChatPanel prefill={chatPrefill} onPrefillUsed={() => setChatPrefill(null)} />
+          </div>
+          <div className="app__canvas" data-tour="canvas">
             <Canvas
               onContextMenu={(ctx) => {
                 setCtxMenu(ctx);
@@ -219,6 +254,15 @@ export default function App() {
         />
       )}
       {statusOpen && <StatusPanel onClose={() => setStatusOpen(false)} />}
+      {showWelcome && <WelcomeModal onStartTour={startTour} onSkip={dismissOnboarding} />}
+      {tourStep !== null && (
+        <OnboardingTour
+          step={tourStep}
+          onNext={advanceTour}
+          onBack={retreatTour}
+          onSkip={dismissOnboarding}
+        />
+      )}
     </ReactFlowProvider>
   );
 }
